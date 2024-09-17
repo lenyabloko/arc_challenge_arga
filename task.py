@@ -2,6 +2,8 @@ import json
 import os
 import time
 import copy
+import uuid
+
 from inspect import signature
 from itertools import product, combinations
 from queue import PriorityQueue
@@ -106,10 +108,13 @@ class Task:
             self.frontier = dict()  # maintain a separate frontier for each abstraction
 
         print("Running task.solve() for #{}".format(self.task_id), flush=True)
+        
         if save_images:
             for input in self.train_input:
                 input.arc_graph.plot(save_fig=True)
-
+            for output in self.train_output:
+                output.arc_graph.plot(save_fig=True)    
+        
         self.start_time = time.time()
 
         # initialize frontier
@@ -157,7 +162,7 @@ class Task:
         if error == 0:
             print("The solution found produced the correct test output!")
         else:
-            print("The solution found predicted {} out of {} pixels incorrectly".format(error, len(
+            print("The best effort predicted {} out of {} pixels incorrectly".format(error, len(
                 self.test_output[0].graph.nodes())))
 
         nodes_explored = {"total_nodes_explored": self.total_nodes_explored,
@@ -263,17 +268,17 @@ class Task:
                 print(frontier_node.data)
                 print("Runtime till solution: {}".format(time.time() - self.start_time))
                 return True
-
+            """ # no timeout for debug
             if time.time() - self.start_time > self.time_limit:  # timeout
                 self.solution_apply_call = frontier_node.data
                 self.solution_train_error = frontier_node.priority
                 self.abstraction = frontier_node.abstraction
-                print("Solution Not Found! Best Solution has cost of {}, Abstraction used: {}, Apply Call = ".format(
+                print("Solution Not Found! Best effort has cost of {}, Abstraction used: {}, Apply Call = ".format(
                     frontier_node.priority, self.abstraction))
                 print(self.solution_apply_call)
                 print("Runtime till solution: {}".format(time.time() - self.start_time))
                 return True
-
+            """
         return False
 
     def search_shared_frontier(self):
@@ -286,7 +291,7 @@ class Task:
             self.solution_apply_call = self.current_best_apply_call
             self.solution_train_error = self.current_best_score
             self.abstraction = self.current_best_abstraction
-            print("Solution Not Found due to empty search space! Best Solution has cost of {}, "
+            print("Frontier has empty search space! Best effort has cost of {}, "
                   "Abstraction used: {}, Apply Call = ".format(self.current_best_score, self.abstraction))
             print(self.current_best_apply_call)
             print("Runtime till solution: {}".format(time.time() - self.start_time))
@@ -339,16 +344,17 @@ class Task:
                 if tabu - 1 == 0:
                     for node in self.tabu_list_waiting[abs]:  # put the nodes in waiting list back into frontier
                         self.frontier.put(node)
-
+        """
         if time.time() - self.start_time > self.time_limit:  # timeout
             self.solution_apply_call = self.current_best_apply_call
             self.solution_train_error = self.current_best_score
             self.abstraction = self.current_best_abstraction
-            print("Solution Not Found due to time limit reached! Best Solution has cost of {}, "
+            print("Solution Not Found due to time limit reached! Best effort has cost of {}, "
                   "Abstraction used: {}, Apply Call = ".format(self.current_best_score, self.abstraction))
             print(self.current_best_apply_call)
             print("Runtime till solution: {}".format(time.time() - self.start_time))
             return True
+        """    
         return False
 
     def search_separate_frontier(self):
@@ -398,17 +404,18 @@ class Task:
                     frontier_node.priority, len(apply_calls), self.abstraction))
             print(apply_calls)
             self.expand_frontier(frontier_node)
-
+            """
             if time.time() - self.start_time > self.time_limit:  # timeout
                 self.solution_apply_call = self.current_best_apply_call
                 self.solution_train_error = self.current_best_score
                 self.abstraction = self.current_best_abstraction
                 print(
-                    "Solution Not Found! Best Solution has cost of {}, Abstraction used: {}, Apply Call = ".format(
+                    "Solution Not Found! Best effort has cost of {}, Abstraction used: {}, Apply Call = ".format(
                         self.current_best_score, self.abstraction))
                 print(self.current_best_apply_call)
                 print("Runtime till solution: {}".format(time.time() - self.start_time))
                 return True
+             """   
         return False
 
     def expand_frontier(self, frontier_node):
@@ -417,6 +424,7 @@ class Task:
         """
         self.frontier_nodes_expanded += 1
         print("Expanding frontier node with abstraction {}".format(self.abstraction))
+        
         self.input_abstracted_graphs[self.abstraction] = []  # up-to-date abstracted graphs
         for input_abstracted_graph in self.input_abstracted_graphs_original[self.abstraction]:
             input_abstracted = input_abstracted_graph.copy()
@@ -425,8 +433,10 @@ class Task:
             self.input_abstracted_graphs[self.abstraction].append(input_abstracted)
 
         filters = self.get_candidate_filters()
+        """ # no timeout for debug
         if (time.time() - self.start_time) > self.time_limit:
             return
+        """
         apply_calls = self.get_candidate_transformations(filters)
         print("Number of New Candidate Nodes = {}".format(len(apply_calls)))
         added_nodes = 0
@@ -435,12 +445,16 @@ class Task:
             self.total_nodes_explored += 1
             cumulated_apply_calls = frontier_node.data.copy()
             cumulated_apply_calls.append(apply_call)
-            apply_call_score, results_token = self.calculate_score(cumulated_apply_calls)
+            
+            # score objective
+            apply_call_score, results_token = self.calculate_score(cumulated_apply_calls, True) # save_iamges
             if apply_call_score == -1:
                 continue
             if results_token in self.frontier_hash[self.abstraction]:
+                """ # no timeout for frbug
                 if (time.time() - self.start_time) > self.time_limit:
                     break
+                """    
                 continue
             else:
                 added_nodes += 1
@@ -455,8 +469,11 @@ class Task:
                 # stop if solution is found or time is up
                 if apply_call_score == 0:
                     break
+                        
+                """ # no timeout for frbug
                 if (time.time() - self.start_time) > self.time_limit:
                     break
+                """    
         print("Number of New Nodes Added to Frontier = {}".format(added_nodes))
         self.total_unique_frontier_nodes += added_nodes
 
@@ -517,10 +534,11 @@ class Task:
         # generate filter calls with two filters
         single_filter_calls = [d.copy() for d in ret_apply_filter_calls]
         for filter_i, (first_filter_call, second_filter_call) in enumerate(combinations(single_filter_calls, 2)):
+            """
             if filter_i % 1000 == 0:
                 if (time.time() - self.start_time) > self.time_limit:
                     break
-
+            """
             candidate_filter = copy.deepcopy(first_filter_call)
             candidate_filter["filters"].extend(second_filter_call["filters"])
             candidate_filter["filter_params"].extend(second_filter_call["filter_params"])
@@ -551,13 +569,16 @@ class Task:
 
         ret_apply_calls = []
         for apply_filters_call in apply_filters_calls:
+            """
             if time.time() - self.start_time > self.time_limit:
                 break
+            """    
             if self.do_constraint_acquisition:
                 constraints = self.constraints_acquisition_local(apply_filters_call)
                 transformation_ops = self.prune_transformations(constraints)
             else:
                 transformation_ops = self.transformation_ops[self.abstraction]
+            
             for transform_op in transformation_ops:
                 sig = signature(getattr(ARCGraph, transform_op))
                 generated_params = self.parameters_generation(apply_filters_call, sig)
@@ -659,31 +680,33 @@ class Task:
             generated_params.append(all_possible_values)
         return generated_params
 
-    def calculate_score(self, apply_call):
+    def calculate_score(self, apply_call, save_images=False):
         """
         calculate the total score across all training examples for a given apply call.
         hash the apply call by converting the results to a string and use it as a key to the cache.
         return -1, -1 if the apply call is invalid
         """
-
+        label = str()
         input_abstracted_graphs = [input_abstracted.copy() for input_abstracted in
                                    self.input_abstracted_graphs_original[self.abstraction]]
         try:
             for input_abstracted_graph in input_abstracted_graphs:
                 for call in apply_call:
                     input_abstracted_graph.apply(**call)
+                    transformation = call['transformation'][0]
+                    label = label + transformation + "-"
         except:
+            print("Aborted transformation {}".format(input_abstracted_graph.name + '-' + label))
             return -1, -1
 
         token_string = ''
 
         score = 0
         for i, output in enumerate(self.train_output):
+            input_abstracted_graph = input_abstracted_graphs[i]
             reconstructed = self.train_input[i].undo_abstraction(input_abstracted_graphs[i])
 
             # hashing
-
-
             for r in range(output.height):
                 for c in range(output.width):
                     token_string = token_string + str(reconstructed.graph.nodes[(r, c)]["color"])
@@ -702,9 +725,16 @@ class Task:
                         score += 2
                     else:  # correctly identified object/background but got the color wrong
                         score += 1
+                        
+            if self.abstraction != 'na':
+                try:
+                    input_abstracted_graph.plot(save_fig=True, file_name=input_abstracted_graph.name + "_" +label+ "_" + str(token_string))
+                except:
+                    print("Failed to plot graph: {}".format(input_abstracted_graph.name + "_" +label+ "_" + str(token_string)))
 
         if token_string == "":  # special case when: flatten abstraction resulting in an empty abstracted graph
             token_string = -1
+
 
         return score, int(token_string)
 

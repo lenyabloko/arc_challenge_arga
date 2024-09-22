@@ -693,30 +693,43 @@ class Task:
             for input_abstracted_graph in input_abstracted_graphs:
                 for call in apply_call:
                     input_abstracted_graph.apply(**call)
-                    transformation = call['transformation'][0]
-                    label = label + transformation + "-"
+                    operation = str(call['transformation'][0])
+                    
+                    if len(operation)==0:
+                        print("Empty operation not applied to {}".format(input_abstracted_graph.name))
+                        continue
+                    if operation not in label:
+                        label = label + operation + "-"
+                        
+                    sig = signature(getattr(ARCGraph, operation))
+                    param = call['transformation_params'][0]
+                    param_type = list(sig.parameters)[2:]
+                    param_value = param.get(param_type[0]).name
+                    if param_value not in label: 
+                        label = label + param_value + "-"
         except:
             print("Aborted transformation {}".format(input_abstracted_graph.name + '-' + label))
             return -1, -1
 
         token_string = ''
-
         score = 0
         for i, output in enumerate(self.train_output):
             input_abstracted_graph = input_abstracted_graphs[i]
             reconstructed = self.train_input[i].undo_abstraction(input_abstracted_graphs[i])
 
-            # hashing
+            """ # hashing
             for r in range(output.height):
                 for c in range(output.width):
                     token_string = token_string + str(reconstructed.graph.nodes[(r, c)]["color"])
+            """
             for node, data in input_abstracted_graphs[i].graph.nodes(data=True):
                 for j, pixel in enumerate(data["nodes"]):
                     if input_abstracted_graphs[i].is_multicolor:
                         token_string = token_string + str(data["color"][j])
                     else:
                         token_string = token_string + str(data["color"])
-
+            token_string = token_string + "-"
+            
             # scoring
             for node, data in output.graph.nodes(data=True):
                 if data["color"] != reconstructed.graph.nodes[node]["color"]:
@@ -726,17 +739,18 @@ class Task:
                     else:  # correctly identified object/background but got the color wrong
                         score += 1
                         
-            if self.abstraction != 'na':
-                try:
-                    input_abstracted_graph.plot(save_fig=True, file_name=input_abstracted_graph.name + "_" +label+ "_" + str(token_string))
-                except:
-                    print("Failed to plot graph: {}".format(input_abstracted_graph.name + "_" +label+ "_" + str(token_string)))
+            if save_images:
+                reconstructed.plot(save_fig=True, file_name=reconstructed.name + "_" +label+ "_" + str(token_string))
+                if self.abstraction != 'na':
+                    try:
+                        input_abstracted_graph.plot(save_fig=True, file_name=input_abstracted_graph.name + "_" +label+ "_" + str(token_string))
+                    except:
+                        print("Failed to plot graph: {}".format(input_abstracted_graph.name + "_" +label+ "_" + str(token_string)))
 
         if token_string == "":  # special case when: flatten abstraction resulting in an empty abstracted graph
             token_string = -1
-
-
-        return score, int(token_string)
+       
+        return score, token_string
 
     # --------------------------------------Constraint Acquisition-----------------------------------
     def constraints_acquisition_global(self):

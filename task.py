@@ -692,21 +692,34 @@ class Task:
         try:
             for input_abstracted_graph in input_abstracted_graphs:
                 for call in apply_call:
-                    input_abstracted_graph.apply(**call)
-                    operation = str(call['transformation'][0])
+                    transformation = call['transformation']
+                    if len(transformation)==0:
+                        print("Empty transformation skipped: {}".format(input_abstracted_graph.name + str(call)))
+                        return -1, -1
+                    operation = str(transformation[0])
                     
                     if len(operation)==0:
-                        print("Empty operation not applied to {}".format(input_abstracted_graph.name))
-                        continue
+                        print("Empty operation skipped: {}".format(input_abstracted_graph.name + str(call)))
+                        return -1, -1
                     if operation not in label:
                         label = label + operation + "-"
                         
                     sig = signature(getattr(ARCGraph, operation))
                     param = call['transformation_params'][0]
                     param_type = list(sig.parameters)[2:]
-                    param_value = param.get(param_type[0]).name
-                    if param_value not in label: 
-                        label = label + param_value + "-"
+                    
+                    if len(param_type)==0:
+                        print("Invalid parameter type skipped: {}".format(input_abstracted_graph.name + str(param_type)))
+                        return -1, -1
+                    
+                    param_value = param.get(param_type[0])
+                    if not isinstance(param_value,Enum):
+                        print("Invalid parameter value skipped: {}".format(input_abstracted_graph.name + str(param_type)))
+                        return -1, -1
+                    
+                    if param_value.name not in label: 
+                        label = label + param_value.name + "-"
+                    input_abstracted_graph.apply(**call)    
         except:
             print("Aborted transformation {}".format(input_abstracted_graph.name + '-' + label))
             return -1, -1
@@ -717,17 +730,20 @@ class Task:
             input_abstracted_graph = input_abstracted_graphs[i]
             reconstructed = self.train_input[i].undo_abstraction(input_abstracted_graphs[i])
 
-            """ # hashing
+            # hashing
             for r in range(output.height):
                 for c in range(output.width):
                     token_string = token_string + str(reconstructed.graph.nodes[(r, c)]["color"])
-            """
+            
+            token_string = token_string + "-"
+            
             for node, data in input_abstracted_graphs[i].graph.nodes(data=True):
                 for j, pixel in enumerate(data["nodes"]):
                     if input_abstracted_graphs[i].is_multicolor:
                         token_string = token_string + str(data["color"][j])
                     else:
                         token_string = token_string + str(data["color"])
+        
             token_string = token_string + "-"
             
             # scoring

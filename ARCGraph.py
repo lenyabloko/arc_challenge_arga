@@ -876,7 +876,7 @@ class ARCGraph:
                 centroid = self.get_centroid(node)
                 pos[node] = (centroid[1], -centroid[0])
 
-            if self.abstraction == "mcccg":
+            if self.abstraction == "na" or self.abstraction == "mcccg":
                 color = [self.colors[0] for node, data in self.graph.nodes(data=True)]
             else:
                 color = [self.colors[data["color"]] for node, data in self.graph.nodes(data=True)]

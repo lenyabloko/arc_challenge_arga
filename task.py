@@ -118,9 +118,9 @@ class Task:
         self.start_time = time.time()
 
         # initialize frontier
-        stop_search = self.initialize_frontier()
+        stop_search = self.initialize_frontier(save_images) # create first frontier_node
 
-        # main search loop
+        # main loop: search for next frontier_node = self.frontier.get(False)
         while not stop_search:
             if self.shared_frontier:
                 stop_search = self.search_shared_frontier()
@@ -172,7 +172,7 @@ class Task:
         return self.abstraction, self.solution_apply_call, error / len(
             self.test_output[0].graph.nodes()), self.solution_train_error, solving_time, nodes_explored
 
-    def initialize_frontier(self):
+    def initialize_frontier(self,save_images=False):
         """
         initializes frontier
         :return: True if a solution is found during initialization or time limit has been reached, False otherwise
@@ -201,6 +201,10 @@ class Task:
                 [getattr(input, Image.abstraction_ops[abstraction])() for input in self.train_input]
             self.output_abstracted_graphs_original[abstraction] = \
                 [getattr(output, Image.abstraction_ops[abstraction])() for output in self.train_output]
+            
+            if save_images:
+                for i, g in enumerate(self.input_abstracted_graphs_original[self.abstraction]):
+                    g.plot(save_fig=True)
 
             # skip abstraction if it results in the same set of abstracted graphs as a previous abstraction,
             # for example: nbccg and ccgbr result in the same graphs if there are no enclosed black pixels
@@ -226,13 +230,13 @@ class Task:
                     continue
             existing_init_abstracted_graphs[abstraction] = self.input_abstracted_graphs_original[abstraction]
 
-            # get the list of object sizes and degrees
+            # get the list of object sizes and degrees in self.input_abstracted_graphs_original[abstraction]
             self.get_static_object_attributes(abstraction)
 
             # keep a list of transformation ops that we modify based on constraint acquisition results
             self.transformation_ops[abstraction] = self.all_possible_transformations[self.abstraction]
 
-            # constraint acquisition (global)
+            # constraint acquisition (global) for self.transformation_ops[self.abstraction] (set up right above)
             if self.do_constraint_acquisition:
                 self.constraints_acquisition_global()
 
@@ -444,9 +448,9 @@ class Task:
         for apply_call in apply_calls:
             self.total_nodes_explored += 1
             cumulated_apply_calls = frontier_node.data.copy()
-            cumulated_apply_calls.append(apply_call)
+            cumulated_apply_calls.append(apply_call) # expand current frontier(data) and apply it to next frontier
             
-            # score objective
+            # score (different pixels vs output) after transformations(cumulated calls) applied to original input
             apply_call_score, results_token = self.calculate_score(cumulated_apply_calls, True) # save_iamges
             if apply_call_score == -1:
                 continue
@@ -462,7 +466,7 @@ class Task:
                 secondary_score = len(cumulated_apply_calls)
                 priority_item = PriorityItem(cumulated_apply_calls, self.abstraction, apply_call_score, secondary_score)
                 if self.shared_frontier:
-                    self.frontier.put(priority_item)
+                    self.frontier.put(priority_item) # create next frontier node using expanded cumulated_apply_calls
                 else:
                     self.frontier[self.abstraction].put(priority_item)
 
@@ -709,17 +713,17 @@ class Task:
                     param_type = list(sig.parameters)[2:]
                     
                     if len(param_type)==0:
-                        print("Invalid parameter type skipped: {}".format(input_abstracted_graph.name + str(param_type)))
+                        print("Invalid transformation parameter type skipped: {}".format(input_abstracted_graph.name + str(param_type)))
                         return -1, -1
                     
                     param_value = param.get(param_type[0])
                     if not isinstance(param_value,Enum):
-                        print("Invalid parameter value skipped: {}".format(input_abstracted_graph.name + str(param_type)))
+                        print("Invalid transformation parameter value skipped: {}".format(input_abstracted_graph.name + str(param_type)))
                         return -1, -1
                     
                     if param_value.name not in label: 
                         label = label + param_value.name + "-"
-                    input_abstracted_graph.apply(**call)    
+                    input_abstracted_graph.apply(**call) # apply all cumulated calls to the original(!!!) abstracted grpah 
         except:
             print("Aborted transformation {}".format(input_abstracted_graph.name + '-' + label))
             return -1, -1

@@ -12,18 +12,18 @@ class ARCGraph:
     insertion_transformation_ops = ["insert"]
     filter_ops = ["filter_by_color", "filter_by_size", "filter_by_degree", "filter_by_neighbor_size",
                   "filter_by_neighbor_color"]
-    param_binding_ops = ["param_bind_neighbor_by_size", "param_bind_neighbor_by_color", "param_bind_node_by_shape",
+    param_binding_ops = ["param_bind_neighbor_by_size", "param_bind_neighbor_by_color", # "param_bind_node_by_shape",
                          "param_bind_node_by_size"]
     transformation_ops = {
         "nbccg": ["update_color", "move_node", "extend_node", "move_node_max", "fill_rectangle", "hollow_rectangle",
-                  "add_border", "insert", "mirror", "flip", "rotate_node", "remove_node"],
-        "nbvcg": ["update_color", "move_node", "extend_node", "move_node_max", "remove_node"],
-        "nbhcg": ["update_color", "move_node", "extend_node", "move_node_max", "remove_node"],
-        "ccgbr": ["update_color", "remove_node"],
-        "ccgbr2": ["update_color", "remove_node"],
-        "ccg": ["update_color", "remove_node"],
+                  "add_border", "insert", "mirror", "flip", "rotate_node"], # "remove_node"],
+        "nbvcg": ["update_color", "move_node", "extend_node", "move_node_max"], #"remove_node"],
+        "nbhcg": ["update_color", "move_node", "extend_node", "move_node_max"], #"remove_node"],
+        "ccgbr": ["update_color"],  #"remove_node"],
+        "ccgbr2": ["update_color"], #"remove_node"],
+        "ccg": ["update_color"], # "remove_node"],
         "mcccg": ["move_node", "move_node_max", "rotate_node", "fill_rectangle", "add_border", "insert", "mirror",
-                  "flip", "remove_node"],
+                  "flip"], #"remove_node"],
         "na": ["flip", "rotate_node"],
         "lrg": ["update_color", "move_node", "extend_node", "move_node_max"]}
     dynamic_parameters = {"color", "direction", "point", "mirror_point", "mirror_direction", "mirror_axis"}
@@ -187,9 +187,9 @@ class ARCGraph:
                 return neighbor
         return None
 
-    def param_bind_node_by_size(self, node, size, exclude: bool = False):
+    def param_bind_node_by_size(self, node, size, exclude: bool = False): # node required for universal signature
         """
-        return any node in graph satisfying given size filter
+        return first node satisfying given size filter
         """
         for n in self.graph.nodes():
             if self.filter_by_size(n, size, exclude):
@@ -702,8 +702,8 @@ class ARCGraph:
         given filters and a node, return True if node satisfies all filters
         """
         satisfy = True
-        for filter, filter_param in zip(filters, filter_params):
-            satisfy = satisfy and getattr(self, filter)(node, **filter_param)
+        for filter, filter_param in zip(filters, filter_params): # ex. filters=['filter_by_color'] filter_params={'color': 0, 'exclude': True}
+            satisfy = satisfy and getattr(self, filter)(node, **filter_param) # filter_by_color(self, node, color: int, exclude: bool = False):
         return satisfy
 
     def apply_param_binding(self, node, transformation_params):

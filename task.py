@@ -36,6 +36,7 @@ class Task:
         self.train_output = []
         self.test_input = []
         self.test_output = []
+        self.save_images = False
 
         # abstracted graphs from input output images
         self.input_abstracted_graphs = dict()  # a dictionary of ARCGraphs, where the keys are the abstraction name and
@@ -108,8 +109,8 @@ class Task:
             self.frontier = dict()  # maintain a separate frontier for each abstraction
 
         print("Running task.solve() for #{}".format(self.task_id), flush=True)
-        
-        if save_images:
+        self.save_images = save_images
+        if self.save_images:
             for input in self.train_input:
                 input.arc_graph.plot(save_fig=True)
             for output in self.train_output:
@@ -118,7 +119,7 @@ class Task:
         self.start_time = time.time()
 
         # initialize frontier
-        stop_search = self.initialize_frontier(save_images) # create first frontier_node
+        stop_search = self.initialize_frontier() # create first frontier_node
 
         # main loop: search for next frontier_node = self.frontier.get(False)
         while not stop_search:
@@ -172,7 +173,7 @@ class Task:
         return self.abstraction, self.solution_apply_call, error / len(
             self.test_output[0].graph.nodes()), self.solution_train_error, solving_time, nodes_explored
 
-    def initialize_frontier(self,save_images=False):
+    def initialize_frontier(self):
         """
         initializes frontier
         :return: True if a solution is found during initialization or time limit has been reached, False otherwise
@@ -202,7 +203,7 @@ class Task:
             self.output_abstracted_graphs_original[abstraction] = \
                 [getattr(output, Image.abstraction_ops[abstraction])() for output in self.train_output]
             
-            if save_images:
+            if self.save_images:
                 for i, g in enumerate(self.input_abstracted_graphs_original[self.abstraction]):
                     g.plot(save_fig=True)
 
@@ -451,7 +452,7 @@ class Task:
             cumulated_apply_calls.append(apply_call) # expand current frontier(data) and apply it to next frontier
             
             # score (different pixels vs output) after transformations(cumulated calls) applied to original input
-            apply_call_score, results_token = self.calculate_score(cumulated_apply_calls, True) # save_iamges
+            apply_call_score, results_token = self.calculate_score(cumulated_apply_calls)
             if apply_call_score == -1:
                 continue
             if results_token in self.frontier_hash[self.abstraction]:
@@ -586,7 +587,7 @@ class Task:
             for transform_op in transformation_ops:
                 sig = signature(getattr(ARCGraph, transform_op))
                 generated_params = self.parameters_generation(apply_filters_call, sig)
-                for item in product(*generated_params):
+                for item in product(*generated_params): # ex. 96 filters = 12 colors (10+most+least) x 4 bindings x 2(Include/Exclude)
                     param_vals = {}
                     for i, param in enumerate(list(sig.parameters)[2:]):  # skip "self", "node"
                         param_vals[sig.parameters[param].name] = item[i]
@@ -594,9 +595,9 @@ class Task:
                     ret_apply_call["transformation"] = [transform_op]
                     ret_apply_call["transformation_params"] = [param_vals]
                     ret_apply_calls.append(ret_apply_call)
-        return ret_apply_calls
+        return ret_apply_calls # ex, 4,608 calls = 96 filters X (12 tranforms for 'nbccg' graph - 8 pruned) x 12 colors for update_color
 
-    def parameters_generation(self, apply_filters_call, transform_sig):
+    def parameters_generation(self, apply_filters_call, transform_sig): # signature of transform function
         """
         given filter nodes and a transformation, generate parameters to be passed to the transformation
         example: given filters for red nodes and move_node_max,
@@ -633,14 +634,14 @@ class Task:
             else:
                 all_possible_values = []
 
-            # then we add dynamic values for parameters
+            # add dynamic values for all parameters with all possible dynamic bindings
             if param_name in ARCGraph.dynamic_parameters:
                 filtered_nodes_all = []
                 # the filters that defines the dynamic parameter values, has their own parameters generated_filter_params
-                for param_binding_op in ARCGraph.param_binding_ops:
+                for param_binding_op in ARCGraph.param_binding_ops: # ex. 'param_bind_node_by_size', etc...
                     sig = signature(getattr(ARCGraph, param_binding_op))
                     generated_filter_params = []
-                    for param in sig.parameters:
+                    for param in sig.parameters: # is 'mirror_direction' in param_bind_node_by_size(self, node, size, exclude: bool = False):
                         filter_param_name = sig.parameters[param].name
                         filter_param_type = sig.parameters[param].annotation
                         if filter_param_name == "self" or filter_param_name == "node":
@@ -649,42 +650,47 @@ class Task:
                             # generated_params[param_name] = [c for c in range(10)]
                             generated_filter_params.append([c for c in range(10)] + ["most", "least"])
                         elif filter_param_name == "size":
-                            generated_filter_params.append(
+                            generated_filter_params.append( # ex. possible sizes [9, 'min', 'max'] for 'na'
                                 [w for w in self.object_sizes[self.abstraction]] + ["min", "max"])
                         elif filter_param_type == bool:
-                            # generated_params[param_name] = [True, False]
+                            # ex. for each possible size listed above, we can Include/Exclude [True, False]
                             generated_filter_params.append([True, False])
                         elif issubclass(filter_param_type, Enum):
                             generated_filter_params.append([value for value in filter_param_type])
 
-                    for item in product(*generated_filter_params):
+                    for item in product(*generated_filter_params): # ex. [[9, 'min', 'max'], [True, False]]
                         param_vals = {}
                         for i, param in enumerate(list(sig.parameters)[2:]):  # skip "self", "node"
                             param_vals[sig.parameters[param].name] = item[i]
-                        applicable_to_all = True
-                        param_bind_nodes = []
+                            
+                        applicable_to_all = True    # assume all abstracted graphs have safisfying nodes 
+                        param_bind_nodes = []       # all nodes satisfying the given apply_filters_call
                         for input_abstracted_graph in self.input_abstracted_graphs[self.abstraction]:
-                            param_bind_nodes_i = []
+                            param_bind_nodes_found = []
                             for filtered_node in input_abstracted_graph.graph.nodes():
+                            # if filtered_node satisfies ex. param_bind_neighbor_by_size(self, node, size, exclude: bool = False)    
                                 if input_abstracted_graph.apply_filters(filtered_node, **apply_filters_call):
-                                    param_binded_node = getattr(input_abstracted_graph, param_binding_op)(filtered_node,
-                                                                                                          **param_vals)
+                                    # return first node satisfying the binding (ex. filtered_node is the neighbor matching the size)
+                                    param_binded_node = getattr(input_abstracted_graph, param_binding_op)(filtered_node,**param_vals)
                                     if param_binded_node is None:
-                                        # unable to find node for filtered node to bind parameter to
+                                        # if there is no matching neighbor of binding size or color or shape etc...
                                         applicable_to_all = False
                                         break
-                                    param_bind_nodes_i.append(param_binded_node)
+                                    #else ex. found the neighbor satifying the binding above  
+                                    param_bind_nodes_found.append(param_binded_node)
 
-                            param_bind_nodes.append(param_bind_nodes_i)
-                            if len(param_bind_nodes_i) == 0:
-                                applicable_to_all = False
+                            if len(param_bind_nodes_found) > 0:
+                                param_bind_nodes.append(param_bind_nodes_found)
+                            else:    
+                                applicable_to_all = False # not all test cases allow binding!
+                                
                         if applicable_to_all and param_bind_nodes not in filtered_nodes_all:
                             all_possible_values.append({"filters": [param_binding_op], "filter_params": [param_vals]})
                             filtered_nodes_all.append(param_bind_nodes)
             generated_params.append(all_possible_values)
         return generated_params
 
-    def calculate_score(self, apply_call, save_images=False):
+    def calculate_score(self, apply_call):
         """
         calculate the total score across all training examples for a given apply call.
         hash the apply call by converting the results to a string and use it as a key to the cache.
@@ -707,22 +713,29 @@ class Task:
                         return -1, -1
                     if operation not in label:
                         label = label + operation + "-"
-                        
-                    sig = signature(getattr(ARCGraph, operation))
+  
                     param = call['transformation_params'][0]
+                    sig = signature(getattr(ARCGraph, operation))
                     param_type = list(sig.parameters)[2:]
-                    
+                    param_value = param.get(param_type[0])
+                    if isinstance(param_value,dict):
+                        #param_bind = param_value.get('filters')
+                        continue # skip dynamic binding
                     if len(param_type)==0:
                         print("Invalid transformation parameter type skipped: {}".format(input_abstracted_graph.name + str(param_type)))
                         return -1, -1
-                    
-                    param_value = param.get(param_type[0])
-                    if not isinstance(param_value,Enum):
-                        print("Invalid transformation parameter value skipped: {}".format(input_abstracted_graph.name + str(param_type)))
-                        return -1, -1
-                    
-                    if param_value.name not in label: 
-                        label = label + param_value.name + "-"
+                        
+                    param_name = param_value 
+                    if isinstance(param_value,Enum):
+                        param_name = param_value.name
+                    else:
+                        try:
+                            param_name = next(iter(param_value))
+                        except:
+                            pass  #  assumed string param_value 
+                                           
+                    if str(param_name) not in label: 
+                        label = label + str(param_name) + "-"
                     input_abstracted_graph.apply(**call) # apply all cumulated calls to the original(!!!) abstracted grpah 
         except:
             print("Aborted transformation {}".format(input_abstracted_graph.name + '-' + label))
@@ -737,19 +750,17 @@ class Task:
             # hashing
             for r in range(output.height):
                 for c in range(output.width):
-                    token_string = token_string + str(reconstructed.graph.nodes[(r, c)]["color"])
-            
+                    token_string = token_string + str(reconstructed.graph.nodes[(r, c)]["color"])      
             token_string = token_string + "-"
-            
+            #"""
             for node, data in input_abstracted_graphs[i].graph.nodes(data=True):
                 for j, pixel in enumerate(data["nodes"]):
                     if input_abstracted_graphs[i].is_multicolor:
                         token_string = token_string + str(data["color"][j])
                     else:
                         token_string = token_string + str(data["color"])
-        
             token_string = token_string + "-"
-            
+            #"""
             # scoring
             for node, data in output.graph.nodes(data=True):
                 if data["color"] != reconstructed.graph.nodes[node]["color"]:
@@ -759,7 +770,7 @@ class Task:
                     else:  # correctly identified object/background but got the color wrong
                         score += 1
                         
-            if save_images:
+            if self.save_images:
                 reconstructed.plot(save_fig=True, file_name=reconstructed.name + "_" +label+ "_" + str(token_string))
                 if self.abstraction != 'na':
                     try:

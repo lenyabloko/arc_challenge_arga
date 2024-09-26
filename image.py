@@ -51,8 +51,8 @@ class Image:
             colors = []
             for node, data in graph.nodes(data=True):
                 colors.append(data["color"])
-            if 0 not in colors:
-                self.background_color = max(set(colors), key=colors.count)  # simple way to retrieve most common item
+            #if 0 not in colors:
+            #    self.background_color = max(set(colors), key=colors.count)  # simple way to retrieve most common item
             self.colors_included = set(colors)
             if len(colors) != 0:
                 self.most_common_color = max(set(colors), key=colors.count)
@@ -69,8 +69,8 @@ class Image:
                     self.graph.nodes[r, c]["color"] = color
                     colors.append(color)
             self.arc_graph = ARCGraph(self.graph, self.name, self)
-            if 0 not in colors:
-                self.background_color = max(set(colors), key=colors.count)  # simple way to retrieve most common item
+            #if 0 not in colors:
+            #    self.background_color = max(set(colors), key=colors.count)  # simple way to retrieve most common item
             self.colors_included = set(colors)
             if len(colors) != 0:
                 self.most_common_color = max(set(colors), key=colors.count)

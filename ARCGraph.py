@@ -15,7 +15,7 @@ class ARCGraph:
     param_binding_ops = ["param_bind_neighbor_by_size", "param_bind_neighbor_by_color", # "param_bind_node_by_shape",
                          "param_bind_node_by_size"]
     transformation_ops = {
-        "nbccg": ["update_color", "move_node", "extend_node", "move_node_max", "fill_rectangle", "hollow_rectangle",
+        "nbccg": ["update_color", "move_node", "extend_node", "move_node_max", "fill_rectangle", # "hollow_rectangle",
                   "add_border", "insert", "mirror", "flip", "rotate_node"], # "remove_node"],
         "nbvcg": ["update_color", "move_node", "extend_node", "move_node_max"], #"remove_node"],
         "nbhcg": ["update_color", "move_node", "extend_node", "move_node_max"], #"remove_node"],
@@ -792,7 +792,7 @@ class ARCGraph:
                     except KeyError:  # ignore pixels outside of frame
                         pass
 
-        return ARCGraph(reconstructed_graph, self.name + "_reconstructed", self.image, None)
+        return ARCGraph(reconstructed_graph, self.name + "_X", self.image, None)
 
     def update_abstracted_graph(self, affected_nodes):
         """

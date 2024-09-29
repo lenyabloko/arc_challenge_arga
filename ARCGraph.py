@@ -12,7 +12,7 @@ class ARCGraph:
     insertion_transformation_ops = ["insert"]
     filter_ops = ["filter_by_color", "filter_by_size", "filter_by_degree", "filter_by_neighbor_size",
                   "filter_by_neighbor_color"]
-    param_binding_ops = ["param_bind_neighbor_by_size", "param_bind_neighbor_by_color", # "param_bind_node_by_shape",
+    param_binding_ops = ["param_bind_neighbor_by_size",# "param_bind_neighbor_by_color", # "param_bind_node_by_shape",
                          "param_bind_node_by_size"]
     transformation_ops = {
         "nbccg": ["update_color", "move_node", "extend_node", "move_node_max", "fill_rectangle", # "hollow_rectangle",
@@ -690,7 +690,8 @@ class ARCGraph:
         for node in self.graph.nodes():
             if self.apply_filters(node, filters, filter_params):
                 params = self.apply_param_binding(node, transformation_params)
-                transformed_nodes[node] = params
+                if len(transformed_nodes) > 0:
+                    transformed_nodes[node] = params # the retrieved actual value (ex. neighbor color)
         for node, params in transformed_nodes.items():
             self.apply_transformation(node, transformation, params)
 
@@ -722,7 +723,7 @@ class ARCGraph:
 
                 #  retrieve value, ex. color of the neighbor with size 1
                 if param_key == "color":
-                    target_color = self.get_color(target_node)
+                    target_color = self.get_color(target_node) # ex. neighbor
                     transformation_params_retrieved[param_key] = target_color
                 elif param_key == "direction":
                     target_direction = self.get_relative_pos(node, target_node)
@@ -730,12 +731,12 @@ class ARCGraph:
                 elif param_key == "mirror_point" or param_key == "point":
                     target_point = self.get_centroid(target_node)
                     transformation_params_retrieved[param_key] = target_point
-                elif param_key == "mirror_axis":
-                    target_axis = self.get_mirror_axis(node, target_node)
-                    transformation_params_retrieved[param_key] = target_axis
-                elif param_key == "mirror_direction":
-                    target_mirror_dir = self.get_mirror_direction(node, target_node)
-                    transformation_params_retrieved[param_key] = target_mirror_dir
+                #elif param_key == "mirror_axis":
+                #    target_axis = self.get_mirror_axis(node, target_node)
+                #    transformation_params_retrieved[param_key] = target_axis
+                #elif param_key == "mirror_direction":
+                #    target_mirror_dir = self.get_mirror_direction(node, target_node)
+                #    transformation_params_retrieved[param_key] = target_mirror_dir
                 else:
                     raise ValueError("unsupported dynamic parameter")
         return transformation_params_retrieved
@@ -786,7 +787,7 @@ class ARCGraph:
                         pass
         else:
             for component, data in self.graph.nodes(data=True):
-                for node in data["nodes"]:
+                for node in data["nodes"]: # subnodes of abstraced component node 
                     try:
                         reconstructed_graph.nodes[node]["color"] = data["color"]
                     except KeyError:  # ignore pixels outside of frame

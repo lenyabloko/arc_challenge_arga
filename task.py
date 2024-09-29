@@ -432,13 +432,10 @@ class Task:
         
         self.input_abstracted_graphs[self.abstraction] = []  # up-to-date abstracted graphs
         for input_abstracted_graph in self.input_abstracted_graphs_original[self.abstraction]:
-            input_abstracted = input_abstracted_graph.copy()
-            for apply_call in frontier_node.data:
-                input_abstracted.apply(**apply_call)  # apply the transformation to the abstracted graph
-            self.input_abstracted_graphs[self.abstraction].append(input_abstracted)
-
-        input_abstracted_graphs = [input_abstracted.copy() for input_abstracted in
-            self.input_abstracted_graphs_original[self.abstraction]]
+            input_abstracted_copy = input_abstracted_graph.copy() # ???
+            for apply_call in frontier_node.data: # 'na' frontier will always be empty
+                input_abstracted_copy.apply(**apply_call)  # apply operation to copy ??
+            self.input_abstracted_graphs[self.abstraction].append(input_abstracted_copy)
 
         filters = self.get_candidate_filters()
         """ # no timeout for debug
@@ -450,24 +447,29 @@ class Task:
         
         added_nodes = 0
         # for apply_call in tqdm(apply_calls):
-        for apply_call in apply_calls:
+        for apply_call in apply_calls: # test each proposed operation on fresh copy of base
             self.total_nodes_explored += 1
-            cumulated_apply_calls = frontier_node.data.copy() # expand frontier(data)
-            cumulated_apply_calls.append(apply_call) # append a Candidate Node (frontier)
             
-            # apply total cumulated_apply_calls(operations) proposed by Candidate Node  
-            label = self.apply(cumulated_apply_calls, input_abstracted_graphs)
+            input_abstracted_graphs_copy = [input_abstracted.copy() for input_abstracted in
+            self.input_abstracted_graphs_original[self.abstraction]] # make a fresh copy              
+            cumulated_apply_calls_copy = frontier_node.data.copy() # copy of base data
+            cumulated_apply_calls_copy.append(apply_call) # append proposed operations
             
-            # score (different pixels vs output) after transformations(cumulated calls) after applying operations
+            # apply total cumulated_apply_calls(operations) to Candidate Node of the tree  
+            label = self.apply(cumulated_apply_calls_copy, input_abstracted_graphs_copy)
+            
+            # score (different pixels vs output) after applying operations
             primary_score = 0
-            for i, output in enumerate(self.train_output):
-                input_abstracted_graph = input_abstracted_graphs[i] # test abstrated graph after all transformations
-                reconstructed = self.train_input[i].undo_abstraction(input_abstracted_graphs[i])
+            for i, output in enumerate(self.train_output): # superimpose ouptut over transformed input 
+                # create new ARCGraph using input image.width/height/background_color and color it
+                # each component node of transformed abstracted grpah contains corresponding subnodes 
+                # use component's color to color each reconstracted subnode into the color of component
+                reconstructed = self.train_input[i].undo_abstraction(input_abstracted_graphs_copy[i])
 
                 # hashing
                 token_string = ''
-                for r in range(output.height):
-                    for c in range(output.width):
+                for c in range(output.width):
+                    for r in range(output.height):
                         token_string = token_string + str(reconstructed.graph.nodes[(r, c)]["color"])      
                 token_string = token_string + "_"
                 """
@@ -502,7 +504,7 @@ class Task:
                 if (time.time() - self.start_time) > self.time_limit:
                     break
                 """    
-                continue # reject proposed Candidate Node (frontier)
+                continue # reject proposed Candidate Node of the search tree
             else:
                 added_nodes += 1
                 self.frontier_hash[self.abstraction].add(token_string)
@@ -516,8 +518,8 @@ class Task:
                 """
                 
                 # create next frontier  
-                secondary_score = len(cumulated_apply_calls) # how many cumulated_apply_calls (operations) were applied  
-                priority_item = PriorityItem(cumulated_apply_calls, self.abstraction, primary_score, secondary_score)
+                secondary_score = len(cumulated_apply_calls_copy) # how many cumulated_apply_calls (operations) were applied  
+                priority_item = PriorityItem(cumulated_apply_calls_copy, self.abstraction, primary_score, secondary_score)
                 if self.shared_frontier:
                     self.frontier.put(priority_item) # create next frontier node using expanded cumulated_apply_calls
                 else:
@@ -550,7 +552,7 @@ class Task:
                 elif param_name == "degree":
                     generated_params.append([d for d in self.object_degrees[self.abstraction]] + ["min", "max", "odd"])
                 elif param_type == bool:
-                    generated_params.append([True]) #, False])
+                    generated_params.append([False])#, True])
                 elif issubclass(param_type, Enum):
                     generated_params.append([value for value in param_type])
 
@@ -698,7 +700,7 @@ class Task:
                                 [w for w in self.object_sizes[self.abstraction]] + ["min", "max"])
                         elif filter_param_type == bool:
                             # ex. for each possible size listed above, we can Include [True, False]
-                            generated_filter_params.append([True]) #, False])
+                            generated_filter_params.append([False])#,True])
                         elif issubclass(filter_param_type, Enum):
                             generated_filter_params.append([value for value in filter_param_type])
 
@@ -734,34 +736,37 @@ class Task:
             generated_params.append(all_possible_values)
         return generated_params
 
-    def apply(self, apply_call, input_abstracted_graphs):
+    def apply(self, apply_calls, input_abstracted_graphs):
         """
         explore current frontier by applying all operations to all abstractions and create unique tree node label 
         """
         label = str()
         try:
-            for input_abstracted_graph in input_abstracted_graphs: # abstracted test cases
-                for call in apply_call:
-                    transformation = call['transformation']
+            for input_abstracted_graph in input_abstracted_graphs: # copies of test cases
+                for apply_call in apply_calls: # apply operation to each abstracted graph
+                    call_copy = apply_call#.copy()
+                    transformation = call_copy['transformation'] # not origical operations!
                     if len(transformation)==0:
-                        print("Empty transformation skipped: {}".format(input_abstracted_graph.name + str(call)))
+                        print("Empty transformation skipped: {}".format(input_abstracted_graph.name + str(call_copy)))
                         return label
                     operation = str(transformation[0])
                     
                     if len(operation)==0:
-                        print("Empty operation skipped: {}".format(input_abstracted_graph.name + str(call)))
+                        print("Empty operation skipped: {}".format(input_abstracted_graph.name + str(call_copy)))
                         return label
                     if operation not in label:
                         label = label + operation + "_"
                                                                           
-                    param = call['transformation_params'][0]
+                    param = call_copy['transformation_params'][0]
                     sig = signature(getattr(ARCGraph, operation))
                     param_type = list(sig.parameters)[2:]
                     
-                    param_object = param.get(param_type[0])
+                    param_object = param.get(param_type[0]) # JSON object
                     object_label = "object" # defualt
                     if isinstance(param_object,Enum):
-                        object_label = param_object.name    
+                        object_label = param_object.name
+                    elif isinstance(param_object,dict):  
+                        param_filters = param_object.get('filters')     
                     else:
                         try:
                             object_label = next(iter(param_object))
@@ -769,17 +774,17 @@ class Task:
                             object_label = param_object
                     if "_"+str(object_label)+"_" not in label: 
                         label = label + str(object_label) + "_"
-                       
-                    filter_params = call['filter_params'] 
+                    
+                    filter_params = call_copy['filter_params'] 
                     if isinstance(filter_params,list) or isinstance(filter_params,dict):
                         params = iter(filter_params)
                         param_pair = next(params, None)
                         if param_pair != None:
                             if isinstance(param_pair,str):
-                               if param_pair not in label: 
+                               if "_"+param_pair not in label: 
                                     label = label + param_pair + "_" 
                             elif isinstance(param_pair,dict):
-                                param_values = iter(param_pair) # param is compound element
+                                param_values = iter(param_pair) 
                                 param_name = next(param_values, None)
                                 if param_name != None and isinstance(param_name,str):    
                                     if "_"+param_name+"_" not in label: 
@@ -796,37 +801,50 @@ class Task:
                                         label = label + str(param_value) + "_"    
                                         
                     if isinstance(param_object,dict):
-                        filters = param_object.get('filters')
-                        bindings = iter(filters)
+                        param_filters = param_object.get('filters')
+                        bindings = iter(param_filters)
                         binding = next(bindings, None)
                         if binding != None :
                             if "_"+str(binding)+"_" not in label: 
-                                label = label + str(param_value) + "_"                                
+                                label = label + str(binding) + "_"                                
                         bind_cond = param_object.get('filter_params')        
-                        if bind_cond != None and isinstance(bind_cond,dict):
+                        if bind_cond != None and isinstance(bind_cond,list):
                             conditions = iter(bind_cond) # name/vale conditions
-                            cond_name = next(conditions,None)
-                            if "_"+str(cond_name)+"_" not in label: 
-                                label = label + str(cond_name) + "_"
-                            cond_value = next(conditions)
-                            if cond_value != None and isinstance(cond_value,dict):
-                                values =  iter(cond_value)
-                                bind_value = next(values,None)
-                                if bind_value != None: 
-                                    if "_"+str(bind_value)+"_" not in label: 
-                                        label = label + str(bind_value) + "_"
-                                bind_value = next(values,None)
-                                if bind_value != None: 
-                                    if "_"+str(bind_value)+"_" not in label: 
-                                        label = label + str(bind_value) + "_"
-                                
+                            cond_pair = next(conditions,None)
+                            if cond_pair != None:
+                                if isinstance(cond_pair,dict):
+                                    cond_values = iter(cond_pair) 
+                                    cond_name = next(cond_values, None)
+                                    if cond_name != None and isinstance(cond_name,str):
+                                        if "_"+cond_name+"_" not in label: # ex. color 
+                                            label = label + cond_name + "_"
+                                        cond_value = cond_pair.get(cond_name)
+                                        #if "_"+str(cond_value)+"_" not in label: # ex. 1
+                                        label = label + str(cond_value) + "_"                   
+                                elif isinstance(cond_pair,list):
+                                    cond_name = next(conditions,None)
+                                    if cond_name != None:            
+                                        if "_"+str(cond_name)+"_" not in label: 
+                                            label = label + str(cond_name) + "_"
+                                        cond_value = next(conditions,None)
+                                        if cond_value != None and isinstance(cond_value,dict):
+                                            values =  iter(cond_value)
+                                            bind_value = next(values,None)
+                                            if bind_value != None: 
+                                                if "_"+str(bind_value)+"_" not in label: 
+                                                    label = label + str(bind_value) + "_"
+                                            bind_value = next(values,None)
+                                            if bind_value != None: 
+                                                if "_"+str(bind_value)+"_" not in label: 
+                                                    label = label + str(bind_value) + "_"
+                                            
                     if len(param_type)==0:
-                        print("Invalid transformation parameter type skipped: {}".format(input_abstracted_graph.name + str(param_type)))
+                        print("Invalid transformation parameter type skipped: {}".format(input_abstracted_graph.name + str(param_type))+str(e))
                         return label
                             
                     # apply all cumulated calls to the original(!!!) abstracted grpah    
-                    input_abstracted_graph.apply(**call)  
-        except:
+                    input_abstracted_graph.apply(**apply_call) # original, not copy !! 
+        except:     # ValueError:
             print("Aborted transformation {}".format(input_abstracted_graph.name + '-' + label))
             return label
 

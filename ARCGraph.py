@@ -22,11 +22,11 @@ class ARCGraph:
         "ccgbr": ["update_color"],  #"remove_node"],
         "ccgbr2": ["update_color"], #"remove_node"],
         "ccg": ["update_color"], # "remove_node"],
-        "mcccg": ["move_node", "move_node_max", "rotate_node", "fill_rectangle", "add_border", "insert", "mirror",
+        "mcccg": ["move_node", "move_node_max", "rotate_node", "fill_rectangle", "add_border",# "insert", "mirror",
                   "flip"], #"remove_node"],
         "na": ["flip", "rotate_node"],
         "lrg": ["update_color", "move_node", "extend_node", "move_node_max"]}
-    dynamic_parameters = {"color", "direction", "point", "mirror_point", "mirror_direction", "mirror_axis"}
+    dynamic_parameters = {"color", "direction", "point"}#, "mirror_point", "mirror_direction", "mirror_axis"}
 
     def __init__(self, graph, name, image, abstraction=None):
 
@@ -690,8 +690,7 @@ class ARCGraph:
         for node in self.graph.nodes():
             if self.apply_filters(node, filters, filter_params):
                 params = self.apply_param_binding(node, transformation_params)
-                if len(transformed_nodes) > 0:
-                    transformed_nodes[node] = params # the retrieved actual value (ex. neighbor color)
+                transformed_nodes[node] = params # the retrieved actual value (ex. neighbor color)
         for node, params in transformed_nodes.items():
             self.apply_transformation(node, transformation, params)
 
@@ -793,7 +792,7 @@ class ARCGraph:
                     except KeyError:  # ignore pixels outside of frame
                         pass
 
-        return ARCGraph(reconstructed_graph, self.name + "_X", self.image, None)
+        return ARCGraph(reconstructed_graph, self.name + "_X_", self.image, None)
 
     def update_abstracted_graph(self, affected_nodes):
         """
@@ -877,7 +876,7 @@ class ARCGraph:
                 centroid = self.get_centroid(node)
                 pos[node] = (centroid[1], -centroid[0])
 
-            if self.abstraction == "na" or self.abstraction == "mcccg":
+            if self.abstraction == "mcccg" or self.abstraction == "na":
                 color = [self.colors[0] for node, data in self.graph.nodes(data=True)]
             else:
                 color = [self.colors[data["color"]] for node, data in self.graph.nodes(data=True)]

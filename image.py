@@ -513,7 +513,7 @@ class Image:
             sub_nodes_color.append(graph.nodes[node]["color"])
         no_abs_graph.add_node((0, 0), nodes=sub_nodes, color=sub_nodes_color, size=len(sub_nodes))
 
-        return ARCGraph(no_abs_graph, self.name, self, "na")
+        return ARCGraph(no_abs_graph, self.name, self, "na") # no_abs_graph represents the image
 
     # undo abstraction
     def undo_abstraction(self, arc_graph):

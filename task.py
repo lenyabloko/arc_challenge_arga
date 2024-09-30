@@ -226,9 +226,10 @@ class Task:
                         found_match = True
                         break
                 if found_match:  # found matching node for all nodes in all abstractions
-                    print("Skipping abstraction {} as it is the same as abstraction {}".format(abstraction, abs))
+                    print("Skipping abstraction {} = {}".format(abstraction, abs))
                     self.skip_abstractions.add(self.abstraction)
                     continue
+            
             existing_init_abstracted_graphs[abstraction] = self.input_abstracted_graphs_original[abstraction]
 
             # get the list of object sizes and degrees in self.input_abstracted_graphs_original[abstraction]
@@ -302,7 +303,7 @@ class Task:
             print("Runtime till solution: {}".format(time.time() - self.start_time))
             return True
 
-        frontier_node = self.frontier.get(False)
+        frontier_node = self.frontier.get() # or pass False for fast fail
 
         # if this abstraction is on tabu list, explore something else
         if self.tabu_list[frontier_node.abstraction] > 0:
@@ -461,7 +462,7 @@ class Task:
             # score (different pixels vs output) after applying operations
             primary_score = 0
             for i, output in enumerate(self.train_output): # superimpose ouptut over transformed input 
-                # create new ARCGraph using input image.width/height/background_color and color it
+                # create ARCGraph using input image.width/height/background_color, and color the graph
                 # each component node of transformed abstracted grpah contains corresponding subnodes 
                 # use component's color to color each reconstracted subnode into the color of component
                 reconstructed = self.train_input[i].undo_abstraction(input_abstracted_graphs_copy[i])
@@ -492,19 +493,20 @@ class Task:
                             primary_score += 1
                             
                 if self.save_images:
-                    reconstructed.plot(save_fig=True, file_name=reconstructed.name + "_" +label+ "_" + str(token_string))
+                    reconstructed.plot(save_fig=True, file_name=reconstructed.name + "_" + label + token_string)
                     if self.abstraction != 'na':
                         try:
-                            input_abstracted_graph.plot(save_fig=True, file_name=input_abstracted_graph.name + "_" +label+ "_" + str(token_string))
+                            input_abstracted_graph.plot(save_fig=True, file_name=input_abstracted_graph.name + "_" + label + token_string)
                         except:
-                            print("Failed to plot graph: {}".format(input_abstracted_graph.name + "_" +label+ "_" + str(token_string)))
+                            print("Failed to plot graph: {}".format(input_abstracted_graph.name + "_"  + label + token_string))
 
             if token_string in self.frontier_hash[self.abstraction]:
                 """ # no timeout for frbug
                 if (time.time() - self.start_time) > self.time_limit:
                     break
                 """    
-                continue # reject proposed Candidate Node of the search tree
+                #print("Frontier did not produced new abstraction: "+ label+token_string)
+                continue # reject proposed Candidate Node of the search tree (aka dead end)
             else:
                 added_nodes += 1
                 self.frontier_hash[self.abstraction].add(token_string)
@@ -552,22 +554,22 @@ class Task:
                 elif param_name == "degree":
                     generated_params.append([d for d in self.object_degrees[self.abstraction]] + ["min", "max", "odd"])
                 elif param_type == bool:
-                    generated_params.append([False])#, True])
+                    generated_params.append([False, True])
                 elif issubclass(param_type, Enum):
                     generated_params.append([value for value in param_type])
 
             # then, we combine all generated values to get all possible combinations of parameters
             for item in product(*generated_params):
-
                 # generate dictionary, keys are the parameter names, values are the corresponding values
                 param_vals = {}
                 for i, param in enumerate(list(sig.parameters)[2:]):  # skip "self", "node"
                     param_vals[sig.parameters[param].name] = item[i]
                 candidate_filter = {"filters": [filter_op], "filter_params": [param_vals]}
-
+                ret_apply_filter_calls.append(candidate_filter)
+                """
                 #  do not include if the filter result in empty set of nodes (this will be the majority of filters)
                 filtered_nodes = []
-                applicable_to_all = True
+                applicable_to_all = True # we dont need to check that filter applies to every test case (see #0d3d703e)
                 for input_abstracted_graph in self.input_abstracted_graphs[self.abstraction]:
                     filtered_nodes_i = []
                     for node in input_abstracted_graph.graph.nodes():
@@ -581,7 +583,7 @@ class Task:
                 if applicable_to_all and filtered_nodes not in filtered_nodes_all:
                     ret_apply_filter_calls.append(candidate_filter)
                     filtered_nodes_all.append(filtered_nodes)
-
+                """
         # generate filter calls with two filters
         single_filter_calls = [d.copy() for d in ret_apply_filter_calls]
         for filter_i, (first_filter_call, second_filter_call) in enumerate(combinations(single_filter_calls, 2)):
@@ -593,7 +595,8 @@ class Task:
             candidate_filter = copy.deepcopy(first_filter_call)
             candidate_filter["filters"].extend(second_filter_call["filters"])
             candidate_filter["filter_params"].extend(second_filter_call["filter_params"])
-
+            ret_apply_filter_calls.append(candidate_filter)
+            """
             filtered_nodes = []
             applicable_to_all = True
             for input_abstracted_graph in self.input_abstracted_graphs[self.abstraction]:
@@ -609,7 +612,7 @@ class Task:
             if applicable_to_all and filtered_nodes not in filtered_nodes_all:
                 ret_apply_filter_calls.append(candidate_filter)
                 filtered_nodes_all.append(filtered_nodes)
-
+            """
         print("Found {} Applicable Filters".format(len(ret_apply_filter_calls)))
         return ret_apply_filter_calls
 
@@ -674,7 +677,7 @@ class Task:
             elif issubclass(param_type, Enum):
                 all_possible_values = [value for value in param_type]
             elif param_type == bool:
-                all_possible_values = [True] #, False]
+                all_possible_values = [False, True]
             elif param_default is None:
                 all_possible_values = [None]
             else:
@@ -700,7 +703,7 @@ class Task:
                                 [w for w in self.object_sizes[self.abstraction]] + ["min", "max"])
                         elif filter_param_type == bool:
                             # ex. for each possible size listed above, we can Include [True, False]
-                            generated_filter_params.append([False])#,True])
+                            generated_filter_params.append([False,True])
                         elif issubclass(filter_param_type, Enum):
                             generated_filter_params.append([value for value in filter_param_type])
 

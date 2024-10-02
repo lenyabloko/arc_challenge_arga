@@ -431,6 +431,7 @@ class Task:
         self.frontier_nodes_expanded += 1
         print("Expanding frontier node with abstraction {}".format(self.abstraction))
         
+        # apply the parent frontier.data to the original abstractions to build up new base
         self.input_abstracted_graphs[self.abstraction] = []  # up-to-date abstracted graphs
         for input_abstracted_graph in self.input_abstracted_graphs_original[self.abstraction]:
             input_abstracted_copy = input_abstracted_graph.copy() # ???
@@ -452,7 +453,8 @@ class Task:
             self.total_nodes_explored += 1
             
             input_abstracted_graphs_copy = [input_abstracted.copy() for input_abstracted in
-            self.input_abstracted_graphs_original[self.abstraction]] # make a fresh copy              
+                self.input_abstracted_graphs_original[self.abstraction]] # make a fresh copy
+                          
             cumulated_apply_calls_copy = frontier_node.data.copy() # copy of base data
             cumulated_apply_calls_copy.append(apply_call) # append proposed operations
             
@@ -465,7 +467,8 @@ class Task:
                 # create ARCGraph using input image.width/height/background_color, and color the graph
                 # each component node of transformed abstracted grpah contains corresponding subnodes 
                 # use component's color to color each reconstracted subnode into the color of component
-                reconstructed = self.train_input[i].undo_abstraction(input_abstracted_graphs_copy[i])
+                input_abstracted_graph_copy = input_abstracted_graphs_copy[i]
+                reconstructed = self.train_input[i].undo_abstraction(input_abstracted_graph_copy)
 
                 # hashing
                 token_string = ''
@@ -493,12 +496,12 @@ class Task:
                             primary_score += 1
                             
                 if self.save_images:
-                    reconstructed.plot(save_fig=True, file_name=reconstructed.name + "_" + label + token_string)
+                    #reconstructed.plot(save_fig=True, file_name=reconstructed.name + "_" + label + token_string)
                     if self.abstraction != 'na':
                         try:
-                            input_abstracted_graph.plot(save_fig=True, file_name=input_abstracted_graph.name + "_" + label + token_string)
+                            input_abstracted_graph_copy.plot(save_fig=True, file_name=input_abstracted_graph_copy.name + "_" + label + token_string)
                         except:
-                            print("Failed to plot graph: {}".format(input_abstracted_graph.name + "_"  + label + token_string))
+                            print("Failed to plot graph: {}".format(input_abstracted_graph_copy.name + "_"  + label + token_string))
 
             if token_string in self.frontier_hash[self.abstraction]:
                 """ # no timeout for frbug
@@ -559,62 +562,40 @@ class Task:
                     generated_params.append([value for value in param_type])
 
             # then, we combine all generated values to get all possible combinations of parameters
-            for item in product(*generated_params):
+            for item in product(*generated_params): # [[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 'most', 'least'], [False, True]]
                 # generate dictionary, keys are the parameter names, values are the corresponding values
                 param_vals = {}
                 for i, param in enumerate(list(sig.parameters)[2:]):  # skip "self", "node"
                     param_vals[sig.parameters[param].name] = item[i]
+                    
                 candidate_filter = {"filters": [filter_op], "filter_params": [param_vals]}
-                ret_apply_filter_calls.append(candidate_filter)
-                """
-                #  do not include if the filter result in empty set of nodes (this will be the majority of filters)
-                filtered_nodes = []
-                applicable_to_all = True # we dont need to check that filter applies to every test case (see #0d3d703e)
-                for input_abstracted_graph in self.input_abstracted_graphs[self.abstraction]:
-                    filtered_nodes_i = []
-                    for node in input_abstracted_graph.graph.nodes():
-                        if input_abstracted_graph.apply_filters(node, **candidate_filter):
-                            filtered_nodes_i.append(node)
-                    if len(filtered_nodes_i) == 0:
-                        applicable_to_all = False
-                    filtered_nodes.extend(filtered_nodes_i)
-                filtered_nodes.sort()
-                # does not result in empty or duplicate set of nodes
-                if applicable_to_all and filtered_nodes not in filtered_nodes_all:
+                if len(self.get_affected_nodes(candidate_filter)) > 0:
                     ret_apply_filter_calls.append(candidate_filter)
-                    filtered_nodes_all.append(filtered_nodes)
-                """
-        # generate filter calls with two filters
-        single_filter_calls = [d.copy() for d in ret_apply_filter_calls]
+        """        
+        # generate filter calls with two filters for each possible combination of two candidate filters
+        single_filter_calls = [d.copy() for d in ret_apply_filter_calls] # make a copy of single filters
         for filter_i, (first_filter_call, second_filter_call) in enumerate(combinations(single_filter_calls, 2)):
-            """
-            if filter_i % 1000 == 0:
-                if (time.time() - self.start_time) > self.time_limit:
-                    break
-            """
             candidate_filter = copy.deepcopy(first_filter_call)
             candidate_filter["filters"].extend(second_filter_call["filters"])
             candidate_filter["filter_params"].extend(second_filter_call["filter_params"])
             ret_apply_filter_calls.append(candidate_filter)
-            """
-            filtered_nodes = []
-            applicable_to_all = True
-            for input_abstracted_graph in self.input_abstracted_graphs[self.abstraction]:
-                filtered_nodes_i = []
-                for node in input_abstracted_graph.graph.nodes():
-                    if input_abstracted_graph.apply_filters(node, **candidate_filter):
-                        filtered_nodes_i.append(node)
-                if len(filtered_nodes_i) == 0:
-                    applicable_to_all = False
-                filtered_nodes.extend(filtered_nodes_i)
-            filtered_nodes.sort()
-            # does not result in empty or duplicate set of nodes
-            if applicable_to_all and filtered_nodes not in filtered_nodes_all:
-                ret_apply_filter_calls.append(candidate_filter)
-                filtered_nodes_all.append(filtered_nodes)
-            """
+        """    
         print("Found {} Applicable Filters".format(len(ret_apply_filter_calls)))
         return ret_apply_filter_calls
+
+    def get_affected_nodes(self, candidate_filter):
+         #  do not include if the filter result in empty set of nodes (this will be the majority of filters)
+        filtered_nodes = []
+        #applicable_to_all = True # we dont need to check that filter applies to every test case (see #0d3d703e)
+        for input_abstracted_graph in self.input_abstracted_graphs[self.abstraction]:
+            filtered_nodes_i = [] # allowed nodes in test case[i]
+            for node in input_abstracted_graph.graph.nodes():
+                if input_abstracted_graph.apply_filters(node, **candidate_filter):
+                    filtered_nodes_i.append(node) # allowed by candidate_filter
+            #if len(filtered_nodes_i) == 0:
+            #    applicable_to_all = False
+            filtered_nodes.extend(filtered_nodes_i)
+        return filtered_nodes 
 
     def get_candidate_transformations(self, apply_filters_calls):
         """

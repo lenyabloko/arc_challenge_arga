@@ -3,7 +3,7 @@ from ARCGraph import *
 
 
 class Image:
-    abstractions = ["na", "nbccg", "ccgbr", "ccgbr2", "ccg", "mcccg", "lrg", "nbvcg"]
+    abstractions = ["nbccg", "ccgbr", "ccgbr2", "ccg", "mcccg", "lrg", "nbvcg"]
     abstraction_ops = {"nbccg": "get_non_black_components_graph",
                        "ccgbr": "get_connected_components_graph_background_removed",
                        "ccgbr2": "get_connected_components_graph_background_removed_2",

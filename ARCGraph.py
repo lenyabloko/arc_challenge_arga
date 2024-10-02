@@ -10,23 +10,23 @@ class ARCGraph:
               "#F012BE", "#FF851B", "#7FDBFF", "#870C25"]
     img_dir = "images"
     insertion_transformation_ops = ["insert"]
-    filter_ops = ["filter_by_color", "filter_by_size", "filter_by_degree", "filter_by_neighbor_size",
+    filter_ops = ["filter_by_color", "filter_by_size", # "filter_by_degree", "filter_by_neighbor_size",
                   "filter_by_neighbor_color"]
     param_binding_ops = ["param_bind_neighbor_by_size",# "param_bind_neighbor_by_color", # "param_bind_node_by_shape",
                          "param_bind_node_by_size"]
     transformation_ops = {
-        "nbccg": ["update_color", "move_node", "extend_node", "move_node_max", "fill_rectangle", # "hollow_rectangle",
-                  "add_border", "insert", "mirror", "flip", "rotate_node"], # "remove_node"],
-        "nbvcg": ["update_color", "move_node", "extend_node", "move_node_max"], #"remove_node"],
-        "nbhcg": ["update_color", "move_node", "extend_node", "move_node_max"], #"remove_node"],
+        "nbccg": ["update_color"],# "move_node", "extend_node", "move_node_max"],# "fill_rectangle", "hollow_rectangle",
+                 # "add_border", "insert", "mirror", "flip", "rotate_node"], # "remove_node"],
+        "nbvcg": ["update_color"],# "move_node", "extend_node", "move_node_max"], #"remove_node"],
+        "nbhcg": ["update_color"], #"move_node", "extend_node", "move_node_max"], #"remove_node"],
         "ccgbr": ["update_color"],  #"remove_node"],
         "ccgbr2": ["update_color"], #"remove_node"],
         "ccg": ["update_color"], # "remove_node"],
-        "mcccg": ["move_node", "move_node_max", "rotate_node", "fill_rectangle", "add_border",# "insert", "mirror",
-                  "flip"], #"remove_node"],
-        "na": ["flip", "rotate_node"],
+        "mcccg": ["move_node"], #"move_node_max",# "rotate_node","fill_rectangle", "add_border",# "insert", "mirror",
+                  #"flip", #"remove_node"],
+        "na": ["update_color"],#"flip", "rotate_node"],
         "lrg": ["update_color", "move_node", "extend_node", "move_node_max"]}
-    dynamic_parameters = {"color", "direction", "point"}#, "mirror_point", "mirror_direction", "mirror_axis"}
+    dynamic_parameters = {"color"}#, "direction", "point"}#, "mirror_point", "mirror_direction", "mirror_axis"}
 
     def __init__(self, graph, name, image, abstraction=None):
 
@@ -782,17 +782,17 @@ class ARCGraph:
                 for i, node in enumerate(data["nodes"]):
                     try:
                         reconstructed_graph.nodes[node]["color"] = data["color"][i]
-                    except KeyError:  # ignore pixels outside of frame
+                    except: # KeyError:  # ignore pixels outside of frame
                         pass
         else:
             for component, data in self.graph.nodes(data=True):
                 for node in data["nodes"]: # subnodes of abstraced component node 
                     try:
                         reconstructed_graph.nodes[node]["color"] = data["color"]
-                    except KeyError:  # ignore pixels outside of frame
+                    except: #KeyError:  # ignore pixels outside of frame
                         pass
 
-        return ARCGraph(reconstructed_graph, self.name + "_X_", self.image, None)
+        return ARCGraph(reconstructed_graph, self.name + "_X", self.image, None)
 
     def update_abstracted_graph(self, affected_nodes):
         """

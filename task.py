@@ -293,7 +293,7 @@ class Task:
         :return: True if a solution is found or time limit has been reached, False otherwise
         """
 
-        if self.frontier.empty():  # exhausted search space
+        if self.frontier.empty():  # if exhausted search space
             self.solution_apply_call = self.current_best_apply_call
             self.solution_train_error = self.current_best_score
             self.abstraction = self.current_best_abstraction
@@ -434,9 +434,9 @@ class Task:
         # apply the parent frontier.data to the original abstractions to build up new base
         self.input_abstracted_graphs[self.abstraction] = []  # up-to-date abstracted graphs
         for input_abstracted_graph in self.input_abstracted_graphs_original[self.abstraction]:
-            input_abstracted_copy = input_abstracted_graph.copy() # ???
+            input_abstracted_copy = input_abstracted_graph.copy() 
             for apply_call in frontier_node.data: # 'na' frontier will always be empty
-                input_abstracted_copy.apply(**apply_call)  # apply operation to copy ??
+                input_abstracted_copy.apply(**apply_call)  # apply operation to copy !
             self.input_abstracted_graphs[self.abstraction].append(input_abstracted_copy)
 
         filters = self.get_candidate_filters()
@@ -453,7 +453,7 @@ class Task:
             self.total_nodes_explored += 1
             
             input_abstracted_graphs_copy = [input_abstracted.copy() for input_abstracted in
-                self.input_abstracted_graphs_original[self.abstraction]] # make a fresh copy
+                self.input_abstracted_graphs[self.abstraction]] # make a working copy
                           
             cumulated_apply_calls_copy = frontier_node.data.copy() # copy of base data
             cumulated_apply_calls_copy.append(apply_call) # append proposed operations
@@ -461,17 +461,19 @@ class Task:
             # apply total cumulated_apply_calls(operations) to Candidate Node of the tree  
             label = self.apply(cumulated_apply_calls_copy, input_abstracted_graphs_copy)
             
-            # score (different pixels vs output) after applying operations
+            # score (different pixels vs output) after applying operations to abstracted graph
             primary_score = 0
+            token_string = ''
             for i, output in enumerate(self.train_output): # superimpose ouptut over transformed input 
                 # create ARCGraph using input image.width/height/background_color, and color the graph
                 # each component node of transformed abstracted grpah contains corresponding subnodes 
                 # use component's color to color each reconstracted subnode into the color of component
                 input_abstracted_graph_copy = input_abstracted_graphs_copy[i]
-                reconstructed = self.train_input[i].undo_abstraction(input_abstracted_graph_copy)
+                
+                image = self.train_input[i] # Image of original input is used to undo abstraction
+                reconstructed = image.undo_abstraction(input_abstracted_graph_copy)
 
                 # hashing
-                token_string = ''
                 for c in range(output.width):
                     for r in range(output.height):
                         token_string = token_string + str(reconstructed.graph.nodes[(r, c)]["color"])      
@@ -497,12 +499,12 @@ class Task:
                             
                 if self.save_images:
                     #reconstructed.plot(save_fig=True, file_name=reconstructed.name + "_" + label + token_string)
-                    if self.abstraction != 'na':
-                        try:
-                            input_abstracted_graph_copy.plot(save_fig=True, file_name=input_abstracted_graph_copy.name + "_" + label + token_string)
-                        except:
-                            print("Failed to plot graph: {}".format(input_abstracted_graph_copy.name + "_"  + label + token_string))
+                    try:
+                        input_abstracted_graph_copy.plot(save_fig=True, file_name=input_abstracted_graph_copy.name + "_" + label + token_string)
+                    except:
+                        print("Failed to plot graph: {}".format(input_abstracted_graph_copy.name + "_"  + label + token_string))
 
+            # commulative results across all test cases after scoring         
             if token_string in self.frontier_hash[self.abstraction]:
                 """ # no timeout for frbug
                 if (time.time() - self.start_time) > self.time_limit:
@@ -823,7 +825,7 @@ class Task:
                                                     label = label + str(bind_value) + "_"
                                             
                     if len(param_type)==0:
-                        print("Invalid transformation parameter type skipped: {}".format(input_abstracted_graph.name + str(param_type))+str(e))
+                        print("Invalid transformation parameter type skipped: {}".format(input_abstracted_graph.name+'='+str(param_type)))
                         return label
                             
                     # apply all cumulated calls to the original(!!!) abstracted grpah    

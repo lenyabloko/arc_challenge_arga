@@ -292,8 +292,7 @@ class Task:
         perform one iteration of search for a solution using a shared frontier
         :return: True if a solution is found or time limit has been reached, False otherwise
         """
-
-        """
+ 
         if self.frontier.empty():  # if exhausted search space
             self.solution_apply_call = self.current_best_apply_call
             self.solution_train_error = self.current_best_score
@@ -301,8 +300,7 @@ class Task:
             print("Empty Frontier is reached! Minimal loss: {}, Abstraction used: {}, Apply Call = ".format(self.current_best_score, self.abstraction))
             print(self.current_best_apply_call)
             print("Runtime till solution: {}".format(time.time() - self.start_time))
-            return True
-        """    
+            return True    
 
         frontier_node = self.frontier.get() 
 
@@ -499,7 +497,7 @@ class Task:
                     if (time.time() - self.start_time) > self.time_limit:
                         break
                     """    
-                    print("Frontier did not produced new abstraction: "+ label+token_string)
+                    #print("Frontier did not produced new abstraction: "+ label+token_string)
                     continue # reject proposed Candidate Node of the search tree (aka dead end)
                 else:
                     added_nodes += 1

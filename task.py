@@ -161,9 +161,9 @@ class Task:
             if data["color"] != reconstructed.graph.nodes[node]["color"]:
                 error += 1
         if error == 0:
-            print("The solution found produced the correct test output!")
+            print("Found solution!")
         else:
-            print("The best effort predicted {} out of {} pixels incorrectly".format(error, len(
+            print("Predicted {} out of {} pixels incorrectly".format(error, len(
                 self.test_output[0].graph.nodes())))
 
         nodes_explored = {"total_nodes_explored": self.total_nodes_explored,
@@ -252,7 +252,7 @@ class Task:
             self.expand_frontier(frontier_node)
 
             if self.shared_frontier:
-                if len(self.frontier.queue) == 0:  # the current abstraction generated no valid results
+                if len(self.frontier.queue) == 0:  # no valid results
                     self.skip_abstractions.add(self.abstraction)
                     continue
                 frontier_score = self.frontier.queue[0].priority
@@ -293,21 +293,22 @@ class Task:
         :return: True if a solution is found or time limit has been reached, False otherwise
         """
 
+        """
         if self.frontier.empty():  # if exhausted search space
             self.solution_apply_call = self.current_best_apply_call
             self.solution_train_error = self.current_best_score
             self.abstraction = self.current_best_abstraction
-            print("Frontier has empty search space! Best effort has cost of {}, "
-                  "Abstraction used: {}, Apply Call = ".format(self.current_best_score, self.abstraction))
+            print("Empty Frontier is reached! Minimal loss: {}, Abstraction used: {}, Apply Call = ".format(self.current_best_score, self.abstraction))
             print(self.current_best_apply_call)
             print("Runtime till solution: {}".format(time.time() - self.start_time))
             return True
+        """    
 
-        frontier_node = self.frontier.get() # or pass False for fast fail
+        frontier_node = self.frontier.get() 
 
         # if this abstraction is on tabu list, explore something else
         if self.tabu_list[frontier_node.abstraction] > 0:
-            # print("abstraction {} is in the tabu list with cool down = {}".format(frontier_node.abstraction, self.tabu_list[frontier_node.abstraction]))
+            print("abstraction {} is in the tabu list with cool down = {}".format(frontier_node.abstraction, self.tabu_list[frontier_node.abstraction]))
             self.tabu_list_waiting[frontier_node.abstraction].append(frontier_node)
             return False
         # if this abstraction is not on tabu list, but has a worse score than before,
@@ -428,21 +429,21 @@ class Task:
         expand one frontier node
         """
  
-        # apply the parent frontier.data to the original abstractions to build up new base
+        # apply the parent frontier.data to the parent node abstractions to build up new base
         self.input_abstracted_graphs[self.abstraction] = []  # up-to-date abstracted graphs
-        for i, input_abstracted_graph in enumerate(self.input_abstracted_graphs_original[self.abstraction]):
+        for i, input_abstracted_original in enumerate(self.input_abstracted_graphs_original[self.abstraction]):
             self.frontier_nodes_expanded += 1
-            print("Expanding frontier node with abstraction {}".format(input_abstracted_graph.name))
+            print("Expanding frontier node with abstraction {}".format(input_abstracted_original.name))
             
+            input_abstracted_graph = input_abstracted_original.copy()   # copy of original
+            if len(self.input_abstracted_graphs[self.abstraction]) > i: # if working copy exist, use it instead
+                input_abstracted_graph = self.input_abstracted_graphs[self.abstraction][i] 
+                
             for apply_call in frontier_node.data: # all operations that were tried and passed
                 input_abstracted_graph.apply(**apply_call)  # apply all past above operations
             self.input_abstracted_graphs[self.abstraction].append(input_abstracted_graph)
 
             filters = self.get_candidate_filters(input_abstracted_graph)
-            """ # no timeout for debug
-            if (time.time() - self.start_time) > self.time_limit:
-                return
-            """
             apply_calls = self.get_candidate_transformations(filters, i) # index
             print("Number of New Candidate Nodes = {}".format(len(apply_calls)))
             
@@ -451,11 +452,12 @@ class Task:
             for apply_call in apply_calls: # try each proposed operation on fresh copy of base
                 self.total_nodes_explored += 1            
                 cumulated_apply_calls_copy = frontier_node.data.copy() # copy of base data
-                cumulated_apply_calls_copy.append(apply_call) # append proposed operation
+                if apply_call not in cumulated_apply_calls_copy:
+                    cumulated_apply_calls_copy.append(apply_call) # append proposed operation
                 
                 input_abstracted_copy = input_abstracted_graph.copy() # fresh copy to apply_call
                 # apply total cumulated_apply_calls(operations) to Candidate Node of the tree  
-                label = self.apply(cumulated_apply_calls_copy, input_abstracted_copy)
+                label = self.apply(cumulated_apply_calls_copy, input_abstracted_copy) # above copy
                 
                 # score (different pixels vs output) after applying operations to abstracted graph
                 primary_score = 0
@@ -497,7 +499,7 @@ class Task:
                     if (time.time() - self.start_time) > self.time_limit:
                         break
                     """    
-                    #print("Frontier did not produced new abstraction: "+ label+token_string)
+                    print("Frontier did not produced new abstraction: "+ label+token_string)
                     continue # reject proposed Candidate Node of the search tree (aka dead end)
                 else:
                     added_nodes += 1
@@ -514,13 +516,15 @@ class Task:
                     # stop if solution is found or time is up
                     if primary_score == 0:
                         break
+                    # create next frontier  
+                    secondary_score = len(cumulated_apply_calls_copy) # how many cumulated_apply_calls (operations) were applied  
+                    if secondary_score == 0:
+                        break
                     """ # no timeout for frbug
                     if (time.time() - self.start_time) > self.time_limit:
                         break
                     """
-                    
-                    # create next frontier  
-                    secondary_score = len(cumulated_apply_calls_copy) # how many cumulated_apply_calls (operations) were applied  
+                                
                     priority_item = PriorityItem(cumulated_apply_calls_copy, self.abstraction, primary_score, secondary_score)
                     if self.shared_frontier:
                         self.frontier.put(priority_item) # create next frontier node using expanded cumulated_apply_calls

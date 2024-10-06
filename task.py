@@ -443,19 +443,19 @@ class Task:
 
             filters = self.get_candidate_filters(input_abstracted_graph)
             apply_calls = self.get_candidate_transformations(filters, i) # index
-            print("Number of New Candidate Nodes = {}".format(len(apply_calls)))
+            print("Number of New Candidate Nodes = {} for {}".format(len(apply_calls),input_abstracted_graph.name ))
             
             added_nodes = 0
             # for apply_call in tqdm(apply_calls):
             for apply_call in apply_calls: # try each proposed operation on fresh copy of base
                 self.total_nodes_explored += 1            
-                cumulated_apply_calls_copy = frontier_node.data.copy() # copy of base data
-                if apply_call not in cumulated_apply_calls_copy:
-                    cumulated_apply_calls_copy.append(apply_call) # append proposed operation
+                cumulated_apply_calls = frontier_node.data.copy() # copy of base data
+                if apply_call not in cumulated_apply_calls:
+                    cumulated_apply_calls.append(apply_call) # append proposed operation
                 
                 input_abstracted_copy = input_abstracted_graph.copy() # fresh copy to apply_call
                 # apply total cumulated_apply_calls(operations) to Candidate Node of the tree  
-                label = self.apply(cumulated_apply_calls_copy, input_abstracted_copy) # above copy
+                label = self.apply(cumulated_apply_calls, input_abstracted_copy) # above copy
                 
                 # score (different pixels vs output) after applying operations to abstracted graph
                 primary_score = 0
@@ -506,16 +506,15 @@ class Task:
                     if self.save_images:
                         #reconstructed.plot(save_fig=True, file_name=reconstructed.name + "_" + label + token_string)
                         try:
-                            input_abstracted_copy.plot(save_fig=True, file_name=input_abstracted_copy.name + "_("+str(len(cumulated_apply_calls_copy))+")_" + label + token_string)
+                            input_abstracted_copy.plot(save_fig=True, file_name=input_abstracted_copy.name + "_("+str(len(cumulated_apply_calls))+")_" + label + token_string)
                         except:
                             print("Failed to plot graph: {}".format(input_abstracted_copy.name + "_"  + label + token_string))
 
-                    
                     # stop if solution is found or time is up
                     if primary_score == 0:
                         break
                     # create next frontier  
-                    secondary_score = len(cumulated_apply_calls_copy) # how many cumulated_apply_calls (operations) were applied  
+                    secondary_score = len(cumulated_apply_calls) # depth of searvh tree- how many (operations) were applied  
                     if secondary_score == 0:
                         break
                     """ # no timeout for frbug
@@ -523,20 +522,20 @@ class Task:
                         break
                     """
                                 
-                    priority_item = PriorityItem(cumulated_apply_calls_copy, self.abstraction, primary_score, secondary_score)
+                    priority_item = PriorityItem(cumulated_apply_calls, self.abstraction, primary_score, secondary_score)
                     if self.shared_frontier:
                         self.frontier.put(priority_item) # create next frontier node using expanded cumulated_apply_calls
                     else:
                         self.frontier[self.abstraction].put(priority_item) # use separate frontier for each abstraction
                 
-        print("Number of New Nodes Added to Frontier = {}".format(added_nodes))
+        print("Number of New Nodes = {} added to Frontier = {}".format(added_nodes,input_abstracted_graph.name))
         self.total_unique_frontier_nodes += added_nodes
 
     def get_candidate_filters(self, input_abstracted_graph):
         """
         return list of candidate filters
         """
-        ret_apply_filter_calls = []  # final list of filter calls
+        apply_filter_calls = []  # final list of filter calls
         filtered_nodes_all = []  # use this list to avoid filters that return the same set of nodes
 
         for filter_op in ARCGraph.filter_ops:
@@ -569,7 +568,7 @@ class Task:
                     
                 candidate_filter = {"filters": [filter_op], "filter_params": [param_vals]}
                 if len(self.get_affected_nodes(candidate_filter, input_abstracted_graph)) > 0:
-                    ret_apply_filter_calls.append(candidate_filter)
+                    apply_filter_calls.append(candidate_filter)
         """        
         # generate filter calls with two filters for each possible combination of two candidate filters
         single_filter_calls = [d.copy() for d in ret_apply_filter_calls] # make a copy of single filters
@@ -579,8 +578,8 @@ class Task:
             candidate_filter["filter_params"].extend(second_filter_call["filter_params"])
             ret_apply_filter_calls.append(candidate_filter)
         """    
-        print("Found {} Applicable Filters".format(len(ret_apply_filter_calls)))
-        return ret_apply_filter_calls
+        print("Found {} Applicable Filters for {}".format(len(apply_filter_calls),input_abstracted_graph.name))
+        return apply_filter_calls
 
     def get_affected_nodes(self, candidate_filter, input_abstracted_graph):
          #  do not include if the filter result in empty set of nodes (this will be the majority of filters)
@@ -624,7 +623,8 @@ class Task:
                         apply_call = apply_filters_call #.copy()  # dont need deep copy here since we are not modifying existing entries
                         apply_call["transformation"] = [transform_op]
                         apply_call["transformation_params"] = [param_vals]
-                        apply_calls.append(apply_call)
+                        if apply_call not in apply_calls:
+                            apply_calls.append(apply_call)
         return apply_calls # ex, 4,608 calls = 96 filters X (12 tranforms for 'nbccg' graph - 8 pruned) x 12 colors for update_color
 
     def parameters_generation(self, apply_filters_call, transform_sig): # signature of transform function

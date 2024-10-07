@@ -18,10 +18,10 @@ def solve_task_id(task_id, train, test, task_type="training"):
 
     task = Task(task_id,train,test)
 
-    abstraction, solution_apply_call, error, train_error, solving_time, nodes_explored = task.solve(
+    abstraction, solution_path, error, train_error, solving_time, nodes_explored = task.solve(
         shared_frontier=True, time_limit=30, do_constraint_acquisition=True, save_images=True)
 
-    solution = {"abstraction": abstraction, "apply_call": solution_apply_call, "train_error": train_error,
+    solution = {"abstraction": abstraction, "solution_path": solution_path, "train_error": train_error,
                 "test_error": error, "time": solving_time, "nodes_explored": nodes_explored}
 
     if not os.path.exists('solutions'):

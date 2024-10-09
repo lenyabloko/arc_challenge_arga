@@ -66,6 +66,7 @@ class Task:
         self.current_best_scores = {}  # used for tracking the current best score for each abstraction
         self.current_best = None # best found solution
         self.solution_apply_call = None  # the apply call that produces the best solution
+        self.solution_apply_calls = []  # the unification of all partial solutions that apply to trainingt examples)
         self.solution_train_error = float("inf")  # the train error of the best solution
         self.current_best_score = float("inf")  # the current best score
         self.current_best_apply_call = None  # the apply call that produces the current best solution
@@ -132,38 +133,51 @@ class Task:
                 solution = self.search_shared_frontier()
             else:
                 solution = self.search_separate_frontier()
-            if len(solution.data) > 0:     
-                self.solution_apply_call = solution.data
-            
-            stop_search = True     
-            self.solutions[solution.name] = solution.data
-            for example, solution in self.solutions.items():
-                if solution == None:
-                    stop_search = False        
-          
-                
+            if solution.priority == 0:               
+                stop_search = True     
+                self.solutions[solution.name] = solution.data
+                for example, solution in self.solutions.items():
+                    if solution == None:
+                        stop_search = False
+    
         solving_time = time.time() - self.start_time
 
         # plot reconstructed train images
-        if save_images:
-            for i, g in enumerate(self.input_abstracted_graphs_original[self.abstraction]):
-
+        for i, g in enumerate(self.input_abstracted_graphs_original[self.abstraction]):
+            if save_images:
                 g.plot(save_fig=True)
-                for j, call in enumerate(self.solution_apply_call):
-                    g.apply(**call)
-                    g.plot(save_fig=True, file_name=g.name + "_{}".format(j))
+                
+            for j, call in enumerate(self.solutions[i]):
+                self.solution_apply_calls.append(call)
+                g.apply(**call)
+                g.plot(save_fig=True, file_name=g.name + "_{}".format(j))
 
                 reconstructed = self.train_input[i].undo_abstraction(g)
                 reconstructed.plot(save_fig=True)
                 self.train_output[i].arc_graph.plot(save_fig=True)
-
+                
         # apply to test image
         test_input = self.test_input[0]
         abstracted_graph = getattr(test_input, Image.abstraction_ops[self.abstraction])()
         abstracted_graph.plot(save_fig=True)
-        for j, call in enumerate(self.solution_apply_call):
+        
+        for solution_apply_call in self.solution_apply_calls:
+            """
+            for j, call in enumerate(solution_apply_call):
+                transform = call["transformation"]
+                params = call["transformation_params"]
+                sig = signature(getattr(ARCGraph, transform))
+                
+                param = params[0]
+                param_type = list(sig.parameters)[2:]
+                param_object = param.get(param_type[0]) # JSON object
+                param_filters = param_object.get('filters')
+            """    
+                
+            label = self.apply(solution_apply_call, abstracted_graph)
             abstracted_graph.apply(**call)
             abstracted_graph.plot(save_fig=True, file_name=abstracted_graph.name + "_{}".format(j))
+
         reconstructed = test_input.undo_abstraction(abstracted_graph)
         if save_images:
             test_input.arc_graph.plot(save_fig=True)
@@ -653,10 +667,14 @@ class Task:
                 generated_params = self.parameters_generation(apply_filters_call, sig)
                 for item in product(*generated_params): # ex. 96 filters = 12 colors (10+most+least) x 4 bindings x 2(Include/Exclude)
                     param_vals = {}
+                    trans_value = None
                     for i, param in enumerate(list(sig.parameters)[2:]):  # skip "self", "node"
                         param_vals[sig.parameters[param].name] = item[i]
-                        
-                    if param_vals[filter_op] != filter_value: # no need to update to the same value as filter 
+                    try:
+                       trans_value = param_vals[filter_op]     
+                    except:
+                        pass    
+                    if trans_value != filter_value: # no need to update to the same value as filter 
                         apply_call = apply_filters_call #.copy()  # dont need deep copy here since we are not modifying existing entries
                         apply_call["transformation"] = [transform_op]
                         apply_call["transformation_params"] = [param_vals]

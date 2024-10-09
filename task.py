@@ -64,11 +64,13 @@ class Task:
         self.tabu_list = {}  # used for temporarily disabling expanding frontier for a specific abstraction
         self.tabu_list_waiting = {}  # list of nodes to be added back to frontier once tabu list expired
         self.current_best_scores = {}  # used for tracking the current best score for each abstraction
+        self.current_best = None # best found solution
         self.solution_apply_call = None  # the apply call that produces the best solution
         self.solution_train_error = float("inf")  # the train error of the best solution
         self.current_best_score = float("inf")  # the current best score
         self.current_best_apply_call = None  # the apply call that produces the current best solution
         self.current_best_abstraction = None  # the abstraction that produced the current best solution
+        self.solutions = dict()
 
         self.load_task_(self.train, self.test)
         self.img_dir = "images/" + self.task_id
@@ -83,10 +85,12 @@ class Task:
         test_data = test
 
         for i, data_pair in enumerate(train_data["train"]):
+            task_example = self.task_id + "_" + str(i + 1)
             self.train_input.append(
-                Image(self, grid=data_pair["input"], name=self.task_id + "_" + str(i + 1) + "_train_in"))
+                Image(self, grid=data_pair["input"],  name=task_example + "_train_in"))
             self.train_output.append(
-                Image(self, grid=data_pair["output"], name=self.task_id + "_" + str(i + 1) + "_train_out"))
+                Image(self, grid=data_pair["output"], name=task_example + "_train_out"))
+            self.solutions[i] = None
 
         tdata = train_data["test"][0]
         self.test_input.append(Image(self, grid=tdata["input"], name=self.task_id + "_" + "_test_in"))
@@ -108,7 +112,7 @@ class Task:
             self.frontier = PriorityQueue()  # frontier for search, each item is a PriorityItem object
         else:
             self.frontier = dict()  # maintain a separate frontier for each abstraction
-
+        
         print("Running task.solve() for #{}".format(self.task_id), flush=True)
         self.save_images = save_images
         if self.save_images:
@@ -125,9 +129,19 @@ class Task:
         # main loop: search for next frontier_node = self.frontier.get(False)
         while not stop_search:
             if self.shared_frontier:
-                stop_search = self.search_shared_frontier()
+                solution = self.search_shared_frontier()
             else:
-                stop_search = self.search_separate_frontier()
+                solution = self.search_separate_frontier()
+            if len(solution.data) > 0:     
+                self.solution_apply_call = solution.data
+            
+            stop_search = True     
+            self.solutions[solution.name] = solution.data
+            for example, solution in self.solutions.items():
+                if solution == None:
+                    stop_search = False        
+          
+                
         solving_time = time.time() - self.start_time
 
         # plot reconstructed train images
@@ -249,7 +263,7 @@ class Task:
                 self.get_static_inserted_objects()
 
             # initiate frontier with dummy node and expand it (representing doing nothing to the input image)
-            frontier_node = PriorityItem([], abstraction, float("inf"), float("inf"))
+            frontier_node = PriorityItem([], abstraction, float("inf"), float("inf"), abstraction)
             self.expand_frontier(frontier_node) # top of the search tee
 
             if self.shared_frontier:
@@ -266,15 +280,16 @@ class Task:
             # check if solution exists in the newly expanded frontier
             if frontier_score == 0:  # if priority is 0, the goal is reached
                 if self.shared_frontier:
-                    frontier_node = self.frontier.get(False)
+                    self.current_best = self.frontier.get(False)
                 else:
-                    frontier_node = self.frontier[self.abstraction].get(False)
-                self.solution_apply_call = frontier_node.data
-                self.solution_train_error = frontier_node.priority
-                print("Solution Found! Abstraction used: {}, Apply Call = ".format(self.abstraction))
-                print(frontier_node.data)
+                    self.current_best = self.frontier[self.abstraction].get(False)    
+                self.solution_apply_call = self.current_best.data
+                self.solution_train_error = self.current_best.priority
+                print("Partial Solution Found! Abstraction used: {}, Apply Call = ".format(self.current_best.abstraction))
+                print(self.current_best.data)
                 print("Runtime till solution: {}".format(time.time() - self.start_time))
-                return True
+                print("===============================================================")
+                # return True # one training case is solved but may be not all 
             """ # no timeout for debug
             if time.time() - self.start_time > self.time_limit:  # timeout
                 self.solution_apply_call = frontier_node.data
@@ -286,9 +301,9 @@ class Task:
                 print("Runtime till solution: {}".format(time.time() - self.start_time))
                 return True
             """
-            self.top_level_node_count += 1    
+            self.top_level_node_count += 1 
         print("Found {} applicable abstractions".format(self.top_level_node_count))    
-        return False
+        return False # continue search for best solution
 
     def search_shared_frontier(self):
         """
@@ -300,10 +315,10 @@ class Task:
             self.solution_apply_call = self.current_best_apply_call
             self.solution_train_error = self.current_best_score
             self.abstraction = self.current_best_abstraction
-            #print("Empty Frontier is reached! Minimal loss: {}, Abstraction used: {}, Apply Call = ".format(self.current_best_score, self.abstraction))
-            #print(self.current_best_apply_call)
-            #print("Runtime till solution: {}".format(time.time() - self.start_time))
-            return False # True - dont stop search, return to other branches of search tree    
+            print("Empty Frontier is reached! Best score: {}, Abstraction used: {}, Apply Call = ".format(self.current_best_score, self.abstraction))
+            print(self.current_best_apply_call)
+            print("Runtime till solution: {}".format(time.time() - self.start_time))
+            return self.current_best # search space is exhosted    
 
         frontier_node = self.frontier.get() 
 
@@ -311,27 +326,31 @@ class Task:
         if self.tabu_list[frontier_node.abstraction] > 0:
             print("abstraction {} is in the tabu list with cool down = {}".format(frontier_node.abstraction, self.tabu_list[frontier_node.abstraction]))
             self.tabu_list_waiting[frontier_node.abstraction].append(frontier_node)
-            return False
+            return frontier_node
+        
         # if this abstraction is not on tabu list, but has a worse score than before,
-        # explore it and put it on tabu list
+        """ # explore it and put it on tabu list
         elif frontier_node.priority >= self.current_best_scores[frontier_node.abstraction]:
             self.tabu_list[frontier_node.abstraction] = tabu_cool_down + 1
         else:
             self.current_best_scores[frontier_node.abstraction] = frontier_node.priority
-
+        """
         apply_calls = frontier_node.data # seach path
         self.abstraction = frontier_node.abstraction
 
         # check for solution
         if frontier_node.priority == 0:  # if priority is 0, the goal is reached
+            self.current_best = frontier_node
             self.solution_apply_call = apply_calls
             self.solution_train_error = 0
-            print("Solution Found! Abstraction used: {}, Apply Call = ".format(self.abstraction))
+            print("Patial Solution Found! Abstraction used: {}, Apply Call = ".format(frontier_node.abstraction))
             print(apply_calls)
             print("Runtime till solution: {}".format(time.time() - self.start_time))
-            return True
+            print("===============================================================")
+            return frontier_node # one training case is solved but may be not all
         else:
             if frontier_node.priority < self.current_best_score:
+                self.current_best = frontier_node 
                 self.current_best_score = frontier_node.priority
                 self.current_best_apply_call = apply_calls
                 self.current_best_abstraction = self.abstraction
@@ -363,7 +382,7 @@ class Task:
             print("Runtime till solution: {}".format(time.time() - self.start_time))
             return True
         """    
-        return False
+        return frontier_node
 
     def search_separate_frontier(self):
         """
@@ -386,21 +405,24 @@ class Task:
             apply_calls = frontier_node.data
 
             # if this abstraction is not on tabu list, but has a worse score than before,
-            # explore it and put it on tabu list
+            """ # explore it and put it on tabu list
             if frontier_node.priority >= self.current_best_scores[self.abstraction]:
                 # print("abstraction {} is put on the tabu list".format(frontier_node.abstraction))
                 self.tabu_list[self.abstraction] = tabu_cool_down + 1
             else:
                 self.current_best_scores[self.abstraction] = frontier_node.priority
+            """    
 
             # check for solution
             if frontier_node.priority == 0:  # if priority is 0, the goal is reached
+                self.current_best = frontier_node
                 self.solution_apply_call = apply_calls
                 self.solution_train_error = 0
                 print("Solution Found! Abstraction used: {}, Apply Call = ".format(self.abstraction))
                 print(apply_calls)
                 print("Runtime till solution: {}".format(time.time() - self.start_time))
-                return True
+                print("===============================================================")
+                return frontier_node # one training case is solved but may be not all
             else:
                 if frontier_node.priority < self.current_best_score:
                     self.current_best_score = frontier_node.priority
@@ -423,7 +445,7 @@ class Task:
                 print("Runtime till solution: {}".format(time.time() - self.start_time))
                 return True
              """   
-        return False
+        return frontier_node
 
     def expand_frontier(self, frontier_node):
         """
@@ -526,17 +548,17 @@ class Task:
                     secondary_score = len(search_path) # depth of searvh tree- how many (operations) were applied
                     
                     # create next frontier 
-                    priority_item = PriorityItem(search_path.copy(), self.abstraction, primary_score, secondary_score)
+                    priority_item = PriorityItem(search_path.copy(), self.abstraction, primary_score, secondary_score, i)
                     if self.shared_frontier:
                         self.frontier.put(priority_item) # create next frontier node using expanded cumulated_apply_calls
                     else:
                         self.frontier[self.abstraction].put(priority_item) # use separate frontier for each abstraction
                     
+                    """
                     # stop if solution is found or time is up
                     if primary_score == 0 or secondary_score == 0:
                         break 
-                      
-                    """ # no timeout for frbug
+                    # no timeout for frbug
                     if (time.time() - self.start_time) > self.time_limit:
                         break
                     """
@@ -545,6 +567,7 @@ class Task:
                 
         print("Added {} new branches to frontier {}".format(added_nodes, input_abstracted_graph.name))
         print("______{} in total__________________".format(self.total_unique_frontier_nodes))
+        return False
 
     def get_candidate_filters(self, input_abstracted_graph):
         """

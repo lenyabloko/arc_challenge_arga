@@ -4,11 +4,12 @@ class PriorityItem(object):
     the sequence of filters and transformations used to arrive at an abstracted graph is stored as the data,
     instead of the abstracted graphs themselves
     """
-    def __init__(self, data, abstraction, priority, secondary_priority=0):
+    def __init__(self, data, abstraction, priority, secondary_priority=0, name=0):
         self.data = data
         self.abstraction = abstraction
         self.priority = priority
         self.secondary_priority = secondary_priority
+        self.name = name
 
     def __lt__(self, other):
         if self.priority == other.priority:

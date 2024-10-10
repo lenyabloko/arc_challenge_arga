@@ -438,7 +438,7 @@ class Task:
                     self.current_best_score = frontier_node.priority
                     self.current_best_apply_call = apply_calls
                     self.current_best_abstraction = self.abstraction
-
+                
             print("Loss = {} at depth {} with abstraction {} and apply calls:".format(
                     frontier_node.priority, len(apply_calls), self.abstraction))
             print(apply_calls)
@@ -481,7 +481,7 @@ class Task:
             tree_branch = frontier_node.data # all operations that were tried and passed (aka search tree branch)     
             for apply_call in tree_branch:
                 input_abstracted_graph.apply(**apply_call)  # apply all tried and passed operations to base
-                print(apply_call)
+                
             self.input_abstracted_graphs[self.abstraction].append(input_abstracted_graph) # current frontier
             print("Applied {} operations to frontier {}".format(len(tree_branch),input_abstracted_graph.name))
 

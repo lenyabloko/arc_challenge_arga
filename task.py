@@ -64,9 +64,9 @@ class Task:
         self.tabu_list = {}  # used for temporarily disabling expanding frontier for a specific abstraction
         self.tabu_list_waiting = {}  # list of nodes to be added back to frontier once tabu list expired
         self.current_best_scores = {}  # used for tracking the current best score for each abstraction
-        self.current_best = None # best found solution
-        self.solution_apply_call = None  # the apply call that produces the best solution
-        self.solution_apply_calls = []  # the unification of all partial solutions that apply to trainingt examples)
+        self.current_best = None    # best found solution
+        self.solution_apply = None    # the apply calls that produces the best solution
+        self.solution_apply_calls = []  # all partial solutions that apply to individual training examples
         self.solution_train_error = float("inf")  # the train error of the best solution
         self.current_best_score = float("inf")  # the current best score
         self.current_best_apply_call = None  # the apply call that produces the current best solution
@@ -161,23 +161,18 @@ class Task:
         abstracted_graph = getattr(test_input, Image.abstraction_ops[self.abstraction])()
         abstracted_graph.plot(save_fig=True)
         
-        for solution_apply_call in self.solution_apply_calls:
-            """
-            for j, call in enumerate(solution_apply_call):
-                transform = call["transformation"]
-                params = call["transformation_params"]
-                sig = signature(getattr(ARCGraph, transform))
+        self.solution_apply = []
+        for call in self.solution_apply_calls:
+            operation = call.copy() 
+            del operation['transformation']
+            del operation['transformation_params']     
+            if len(self.get_affected_nodes(operation, abstracted_graph)) > 0:
+                self.solution_apply.append(call)
                 
-                param = params[0]
-                param_type = list(sig.parameters)[2:]
-                param_object = param.get(param_type[0]) # JSON object
-                param_filters = param_object.get('filters')
-            """    
-                
-            label = self.apply(solution_apply_call, abstracted_graph)
+        for call in self.solution_apply:        
             abstracted_graph.apply(**call)
-            abstracted_graph.plot(save_fig=True, file_name=abstracted_graph.name + "_{}".format(j))
-
+            
+        abstracted_graph.plot(save_fig=True, file_name=abstracted_graph.name + "_{}".format(j))
         reconstructed = test_input.undo_abstraction(abstracted_graph)
         if save_images:
             test_input.arc_graph.plot(save_fig=True)
@@ -199,7 +194,7 @@ class Task:
                           "total_unique_frontier_nodes": self.total_unique_frontier_nodes,
                           "frontier_nodes_expanded": self.frontier_nodes_expanded}
 
-        return self.abstraction, self.solution_apply_call, error / len(
+        return self.abstraction, self.solution_apply, error / len(
             self.test_output[0].graph.nodes()), self.solution_train_error, solving_time, nodes_explored
 
     def initialize_frontier(self):
@@ -368,10 +363,11 @@ class Task:
                 self.current_best_score = frontier_node.priority
                 self.current_best_apply_call = apply_calls
                 self.current_best_abstraction = self.abstraction
-
+        """"
         print("Loss = {} at depth {} with abstraction {} and path: ".format(
             frontier_node.priority, len(apply_calls), self.abstraction))
         print(apply_calls)
+        """
         self.expand_frontier(frontier_node)
 
         all_on_tabu = all(tabu > 0 for tabu in self.tabu_list.values())
@@ -494,15 +490,14 @@ class Task:
             print("Found {} applicable operations for {}".format(len(apply_calls),input_abstracted_graph.name))
             added_nodes = 0
             # for apply_call in tqdm(apply_calls):
-            for apply_call in apply_calls: # try each proposed operation on fresh copy of base example (above)
-                self.total_nodes_explored += 1            
+            for apply_call in apply_calls: # try each proposed operation on fresh copy of base example (above)            
                 search_path = tree_branch.copy()  # calls already tried by this frontier (aka search tree branch)
                 if apply_call not in search_path:
                     search_path.append(apply_call) # append newly proposed operation for this frotier
                 
                 input_abstracted_copy = input_abstracted_graph.copy() # fresh copy of base graph to apply_call 
                 label = self.apply(search_path, input_abstracted_copy) # try new branch of the search tree 
-                            
+                self.total_nodes_explored += 1            
                 #for i, output in enumerate(self.train_output): # superimpose ouptut over transformed input 
                 # create ARCGraph using input image.width/height/background_color, and color the graph
                 # each component node of transformed abstracted grpah contains corresponding subnodes 
@@ -607,7 +602,7 @@ class Task:
                 elif param_name == "degree":
                     generated_params.append([d for d in self.object_degrees[self.abstraction]] + ["min", "max", "odd"])
                 elif param_type == bool:
-                    generated_params.append([False])#,True])
+                    generated_params.append([False, True])
                 elif issubclass(param_type, Enum):
                     generated_params.append([value for value in param_type])
 
@@ -739,7 +734,7 @@ class Task:
                                 [w for w in self.object_sizes[self.abstraction]] + ["min", "max"])
                         elif filter_param_type == bool:
                             # ex. for each possible size listed above, we can Include [True, False]
-                            generated_filter_params.append([False])#,True])
+                            generated_filter_params.append([False,True])
                         elif issubclass(filter_param_type, Enum):
                             generated_filter_params.append([value for value in filter_param_type])
 

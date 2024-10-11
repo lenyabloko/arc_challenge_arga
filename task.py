@@ -133,63 +133,69 @@ class Task:
                 solution = self.search_shared_frontier()
             else:
                 solution = self.search_separate_frontier()
-            if solution.priority == 0:               
-                stop_search = True     
-                self.solutions[solution.name] = solution.data
-                for example, solution in self.solutions.items():
-                    if solution == None:
-                        stop_search = False
+            if solution.priority == 0:
+                solutions = self.solutions[solution.name] 
+                if solutions == None or len(solutions) == 0:
+                    self.solutions[solution.name] = [solution.data]
+                else: 
+                    self.solutions[solution.name].append(solution.data)                              
+                    
+                # plot reconstructed train images and merge partial solutions
+                for i, g in enumerate(self.input_abstracted_graphs_original[self.abstraction]):
+                    if self.solutions[i] == None:
+                       break        
+                    if save_images:
+                        g.plot(save_fig=True)
+                    
+                    for solution in self.solutions[i]:
+                        for j, call in enumerate(solution):
+                            self.solution_apply_calls.append(call)
+                            g.apply(**call)
+                            
+                            if save_images:
+                                g.plot(save_fig=True, file_name=g.name + "_{}".format(j))
+                                reconstructed = self.train_input[i].undo_abstraction(g)
+                                reconstructed.plot(save_fig=True)
+                                self.train_output[i].arc_graph.plot(save_fig=True)
+                            
+                    # apply to test image
+                    test_input = self.test_input[0]
+                    abstracted_graph = getattr(test_input, Image.abstraction_ops[self.abstraction])()
+                    if save_images:
+                        abstracted_graph.plot(save_fig=True)
+                    
+                    self.solution_apply = []
+                    for call in self.solution_apply_calls:
+                        operation = call.copy() 
+                        del operation['transformation']
+                        del operation['transformation_params']     
+                        if len(self.get_affected_nodes(operation, abstracted_graph)) > 0:
+                            self.solution_apply.append(call)
+                            
+                    for call in self.solution_apply:        
+                        abstracted_graph.apply(**call)
+                        
+                    abstracted_graph.plot(save_fig=True, file_name=abstracted_graph.name + "_{}".format(j))
+                    reconstructed = test_input.undo_abstraction(abstracted_graph)
+                    if save_images:
+                        test_input.arc_graph.plot(save_fig=True)
+                        reconstructed.plot(save_fig=True)
+                        self.test_output[0].arc_graph.plot(save_fig=True)
+
+                    # check if the solution found the correct test output
+                    error = 0
+                    for node, data in self.test_output[0].graph.nodes(data=True):
+                        if data["color"] != reconstructed.graph.nodes[node]["color"]:
+                            error += 1
+                    if error == 0:
+                        print("Found solution!")
+                        stop_search = True
+                    else:
+                        print("Predicted {} out of {} pixels incorrectly".format(error, len(
+                            self.test_output[0].graph.nodes())))
+                        print("===============================================================")
     
         solving_time = time.time() - self.start_time
-
-        # plot reconstructed train images
-        for i, g in enumerate(self.input_abstracted_graphs_original[self.abstraction]):
-            if save_images:
-                g.plot(save_fig=True)
-                
-            for j, call in enumerate(self.solutions[i]):
-                self.solution_apply_calls.append(call)
-                g.apply(**call)
-                g.plot(save_fig=True, file_name=g.name + "_{}".format(j))
-
-                reconstructed = self.train_input[i].undo_abstraction(g)
-                reconstructed.plot(save_fig=True)
-                self.train_output[i].arc_graph.plot(save_fig=True)
-                
-        # apply to test image
-        test_input = self.test_input[0]
-        abstracted_graph = getattr(test_input, Image.abstraction_ops[self.abstraction])()
-        abstracted_graph.plot(save_fig=True)
-        
-        self.solution_apply = []
-        for call in self.solution_apply_calls:
-            operation = call.copy() 
-            del operation['transformation']
-            del operation['transformation_params']     
-            if len(self.get_affected_nodes(operation, abstracted_graph)) > 0:
-                self.solution_apply.append(call)
-                
-        for call in self.solution_apply:        
-            abstracted_graph.apply(**call)
-            
-        abstracted_graph.plot(save_fig=True, file_name=abstracted_graph.name + "_{}".format(j))
-        reconstructed = test_input.undo_abstraction(abstracted_graph)
-        if save_images:
-            test_input.arc_graph.plot(save_fig=True)
-            reconstructed.plot(save_fig=True)
-            self.test_output[0].arc_graph.plot(save_fig=True)
-
-        # check if the solution found the correct test output
-        error = 0
-        for node, data in self.test_output[0].graph.nodes(data=True):
-            if data["color"] != reconstructed.graph.nodes[node]["color"]:
-                error += 1
-        if error == 0:
-            print("Found solution!")
-        else:
-            print("Predicted {} out of {} pixels incorrectly".format(error, len(
-                self.test_output[0].graph.nodes())))
-
         nodes_explored = {"total_nodes_explored": self.total_nodes_explored,
                           "total_unique_frontier_nodes": self.total_unique_frontier_nodes,
                           "frontier_nodes_expanded": self.frontier_nodes_expanded}
@@ -488,6 +494,7 @@ class Task:
             filters = self.get_candidate_filters(input_abstracted_graph)
             apply_calls = self.get_candidate_transformations(filters, i) # i = index pointing to current example
             print("Found {} applicable operations for {}".format(len(apply_calls),input_abstracted_graph.name))
+            
             added_nodes = 0
             # for apply_call in tqdm(apply_calls):
             for apply_call in apply_calls: # try each proposed operation on fresh copy of base example (above)            

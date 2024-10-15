@@ -108,20 +108,19 @@ class Task:
         """
         self.shared_frontier = shared_frontier
         self.do_constraint_acquisition = do_constraint_acquisition
+        self.save_images = save_images
         self.time_limit = time_limit
         if shared_frontier:
             self.frontier = PriorityQueue()  # frontier for search, each item is a PriorityItem object
         else:
             self.frontier = dict()  # maintain a separate frontier for each abstraction
-        
+    
+        for input in self.train_input:
+            input.arc_graph.plot(save_fig=True)
+        for output in self.train_output:
+            output.arc_graph.plot(save_fig=True)    
+    
         print("Running task.solve() for #{}".format(self.task_id), flush=True)
-        self.save_images = save_images
-        if self.save_images:
-            for input in self.train_input:
-                input.arc_graph.plot(save_fig=True)
-            for output in self.train_output:
-                output.arc_graph.plot(save_fig=True)    
-        
         self.start_time = time.time()
 
         # initialize frontier
@@ -141,46 +140,39 @@ class Task:
                     self.solutions[solution.name].append(solution.data)                              
                     
                 # plot reconstructed train images and merge partial solutions
-                for i, g in enumerate(self.input_abstracted_graphs_original[self.abstraction]):
+                for i, g in enumerate(self.input_abstracted_graphs_original[self.abstraction]):        
                     if self.solutions[i] == None:
-                       break        
-                    if save_images:
-                        g.plot(save_fig=True)
-                    
+                       break
                     for solution in self.solutions[i]:
                         for j, call in enumerate(solution):
                             self.solution_apply_calls.append(call)
                             g.apply(**call)
-                            
-                            if save_images:
-                                g.plot(save_fig=True, file_name=g.name + "_{}".format(j))
-                                reconstructed = self.train_input[i].undo_abstraction(g)
-                                reconstructed.plot(save_fig=True)
-                                self.train_output[i].arc_graph.plot(save_fig=True)
-                            
+                            g.plot(save_fig=True, file_name=g.name + "_{}".format(i+1))
+                            reconstructed = self.train_input[i].undo_abstraction(g)
+                            reconstructed.plot(save_fig=True)
+                            self.train_output[i].arc_graph.plot(save_fig=True)
+                       
                     # apply to test image
                     test_input = self.test_input[0]
                     abstracted_graph = getattr(test_input, Image.abstraction_ops[self.abstraction])()
-                    if save_images:
-                        abstracted_graph.plot(save_fig=True)
+                    abstracted_graph.plot(save_fig=True)
                     
                     self.solution_apply = []
                     for call in self.solution_apply_calls:
                         operation = call.copy() 
                         del operation['transformation']
                         del operation['transformation_params']     
-                        if len(self.get_affected_nodes(operation, abstracted_graph)) > 0:
+                        if call not in self.solution_apply: #len(self.get_affected_nodes(operation, abstracted_graph)) > 0:
                             self.solution_apply.append(call)
                             
                     for call in self.solution_apply:        
                         abstracted_graph.apply(**call)
                         
-                    abstracted_graph.plot(save_fig=True, file_name=abstracted_graph.name + "_{}".format(j))
+                    abstracted_graph.plot(save_fig=True, file_name=abstracted_graph.name)
                     reconstructed = test_input.undo_abstraction(abstracted_graph)
-                    if save_images:
-                        test_input.arc_graph.plot(save_fig=True)
-                        reconstructed.plot(save_fig=True)
-                        self.test_output[0].arc_graph.plot(save_fig=True)
+                    reconstructed.plot(save_fig=True)
+                    test_input.arc_graph.plot(save_fig=True)
+                    self.test_output[0].arc_graph.plot(save_fig=True)
 
                     # check if the solution found the correct test output
                     error = 0
@@ -194,6 +186,11 @@ class Task:
                         print("Predicted {} out of {} pixels incorrectly".format(error, len(
                             self.test_output[0].graph.nodes())))
                         print("===============================================================")
+        
+        for i, g in enumerate(self.input_abstracted_graphs_original[self.abstraction]):
+            for call in self.solution_apply:        
+                g.apply(**call)
+            g.plot(save_fig=True, file_name=g.name+"_"+str(i+1)+"_out")
     
         solving_time = time.time() - self.start_time
         nodes_explored = {"total_nodes_explored": self.total_nodes_explored,
@@ -508,7 +505,7 @@ class Task:
                 #for i, output in enumerate(self.train_output): # superimpose ouptut over transformed input 
                 # create ARCGraph using input image.width/height/background_color, and color the graph
                 # each component node of transformed abstracted grpah contains corresponding subnodes 
-                # use component's color to color each reconstracted subnode into the color of component
+                # use component's color to color each reconstructed subnode into the color of component
                 image = self.train_input[i] # Image of original input is used to undo abstraction
                 reconstructed = image.undo_abstraction(input_abstracted_copy) # working copy after apply_calls
 
@@ -555,7 +552,7 @@ class Task:
                     self.frontier_hash[self.abstraction].add(token_string) # one hash for all examples!
                     
                     if self.save_images:
-                        #reconstructed.plot(save_fig=True, file_name=reconstructed.name + "_" + label + token_string)
+                        reconstructed.plot(save_fig=True, file_name=reconstructed.name + "_("+str(len(search_path))+")_" + label + token_string)
                         try:
                             input_abstracted_copy.plot(save_fig=True, file_name=input_abstracted_copy.name + "_("+str(len(search_path))+")_" + label + token_string)
                         except:
@@ -899,10 +896,11 @@ class Task:
         no_movements = True
         for i, input in enumerate(self.train_input):
             for node, data in input.graph.nodes(data=True):
-                if (data["color"] != input.background_color and self.train_output[i].graph.nodes[node][
-                    "color"] == input.background_color) \
-                        or (data["color"] == input.background_color and self.train_output[i].graph.nodes[node][
-                    "color"] != input.background_color):
+                output_nodes = self.train_output[i].graph.nodes
+                if output_nodes == None or node not in output_nodes:
+                    continue
+                if (data["color"] != input.background_color and output_nodes[node]["color"] == input.background_color) \
+                    or (data["color"] == input.background_color and output_nodes[node]["color"] != input.background_color):
                     no_movements = False
         no_new_objects = True
         for i, output_abstracted_graph in enumerate(self.output_abstracted_graphs_original[self.abstraction]):

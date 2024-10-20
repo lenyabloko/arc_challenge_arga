@@ -3,6 +3,7 @@ import os
 import time
 import copy
 import uuid
+import networkx as nx
 
 from inspect import signature
 from itertools import product, combinations
@@ -207,7 +208,8 @@ class Task:
         """
         print("Initializing Frontiers")
 
-        existing_init_abstracted_graphs = {}  # keep track of existing abstracted graphs to check for duplication
+        in_abstracted_graphs = {}  # keep track of existing abstracted graphs to check for duplication
+        out_abstracted_graphs = {}
 
         for abstraction in self.all_possible_abstractions:
             # specify the abstraction currently working with
@@ -230,35 +232,19 @@ class Task:
             self.output_abstracted_graphs_original[abstraction] = \
                 [getattr(output, Image.abstraction_ops[abstraction])() for output in self.train_output]
             
-            if self.save_images:
-                for i, g in enumerate(self.input_abstracted_graphs_original[self.abstraction]):
-                    g.plot(save_fig=True)
-
-            # skip abstraction if it results in the same set of abstracted graphs as a previous abstraction,
-            # for example: nbccg and ccgbr result in the same graphs if there are no enclosed black pixels
-            found_match = False
-            if len(existing_init_abstracted_graphs) != 0:
-                for abs, existing_abs_graphs in existing_init_abstracted_graphs.items():
-                    for instance, existing_abs_graph in enumerate(existing_abs_graphs):
-                        existing_set = set()
-                        new_set = set()
-                        for n, subnodes1 in self.input_abstracted_graphs_original[abstraction][instance].graph.nodes(
-                                data="nodes"):
-                            existing_set.add(frozenset(subnodes1))
-                        for m, subnodes2 in existing_abs_graph.graph.nodes(data="nodes"):
-                            new_set.add(frozenset(subnodes2))
-                        if existing_set != new_set:
-                            break  # break if did not match for this instance
-                    else:  # did not break, found match for all instances
-                        found_match = True
-                        break
-                if found_match:  # found matching node for all nodes in all abstractions
-                    print("Skipping abstraction {} = {}".format(abstraction, abs))
-                    self.skip_abstractions.add(self.abstraction)
-                    continue
+            self.skip_duplicates(in_abstracted_graphs, abstraction)
             
-            existing_init_abstracted_graphs[abstraction] = self.input_abstracted_graphs_original[abstraction]
+            #if self.save_images:
+            for i, g in enumerate(self.input_abstracted_graphs_original[self.abstraction]):
+                g.plot(save_fig=True)
+            for i, g in enumerate(self.output_abstracted_graphs_original[self.abstraction]):
+                g.plot(save_fig=True)    
+            
+            in_abstracted_graphs[abstraction] = self.input_abstracted_graphs_original[abstraction]
+            out_abstracted_graphs[abstraction] = self.output_abstracted_graphs_original[abstraction]
 
+            self.check_for_isomorph(in_abstracted_graphs[abstraction], out_abstracted_graphs[abstraction])
+            
             # get the list of object sizes and degrees in self.input_abstracted_graphs_original[abstraction]
             self.get_static_object_attributes(abstraction)
 
@@ -316,6 +302,36 @@ class Task:
             self.top_level_node_count += 1 
         print("Found {} applicable abstractions".format(self.top_level_node_count))    
         return False # continue search for best solution
+
+    def skip_duplicates(self, in_abstracted_graphs, abstraction):
+        # skip abstraction if it results in the same set of abstracted graphs as a previous abstraction,
+        # for example: nbccg and ccgbr result in the same graphs if there are no enclosed black pixels
+        found_match = False
+        for i, in_abs_graphs in in_abstracted_graphs.items():
+            for j, in_abs_graph in enumerate(in_abs_graphs):
+                existing_set = set()
+                new_set = set()
+                for n, subnodes1 in self.input_abstracted_graphs_original[abstraction][j].graph.nodes(
+                        data="nodes"):
+                    existing_set.add(frozenset(subnodes1))
+                for m, subnodes2 in in_abs_graph.graph.nodes(data="nodes"):
+                    new_set.add(frozenset(subnodes2))
+                if existing_set != new_set:
+                    break  # break if did not match for this instance
+            else:  # did not break, found match for all instances
+                found_match = True
+                break
+        if found_match:  # found matching node for all nodes in all abstractions
+            print("Skipping abstraction {} = {}".format(abstraction, i))
+            self.skip_abstractions.add(self.abstraction)
+        return
+    
+    def check_for_isomorph(self, in_abs_graphs, out_abs_graphs):
+        for i, in_abs_graph in enumerate(in_abs_graphs):
+            ismags = nx.isomorphism.ISMAGS(in_abs_graph.graph, out_abs_graphs[i].graph)
+            mcs = ismags.largest_common_subgraph()
+            print(mcs)
+            #in_abs_graph.plot(save_fig=True, file_name=in_abs_graph.name + "_common")       
 
     def search_shared_frontier(self):
         """
@@ -501,7 +517,8 @@ class Task:
                 
                 input_abstracted_copy = input_abstracted_graph.copy() # fresh copy of base graph to apply_call 
                 label = self.apply(search_path, input_abstracted_copy) # try new branch of the search tree 
-                self.total_nodes_explored += 1            
+                self.total_nodes_explored += 1    
+                        
                 #for i, output in enumerate(self.train_output): # superimpose ouptut over transformed input 
                 # create ARCGraph using input image.width/height/background_color, and color the graph
                 # each component node of transformed abstracted grpah contains corresponding subnodes 

@@ -3,7 +3,6 @@ import os
 import time
 import copy
 import uuid
-import networkx as nx
 
 from inspect import signature
 from itertools import product, combinations
@@ -328,20 +327,22 @@ class Task:
     
     def list_isomorph(self, in_abs_graphs, out_abs_graphs):
         for i, in_abs_graph in enumerate(in_abs_graphs):
-            ismags = nx.isomorphism.ISMAGS(in_abs_graph.graph, out_abs_graphs[i].graph)
-            graphs = list(ismags.largest_common_subgraph())
-        return graphs
+            grpahs = in_abs_graph.graph.get(out_abs_graphs[i].graph)
+        return list(graphs)
            
     def find_common_surfaces(self, in_abs_graphs, out_abs_graphs):
         in_commons = []
         out_commons = []
         for i, in_abs_graph in enumerate(in_abs_graphs):
-            width = getattr(in_abs_graph,"width")
-            height = getattr(in_abs_graph,"height")
-            in_comm = in_abs_graph.find_common_descendants()
-            if in_comm not in in_commons:
-               in_commons.append(in_comm) 
-               
+            #width = getattr(in_abs_graph,"width")
+            #height = getattr(in_abs_graph,"height")
+            width, height = in_abs_graph.image.image_size
+            in_comms = in_abs_graph.find_common_descendants()
+            for comm in in_comms:
+                #symmetries = in_abs_graph.analyze_symmetry(comm)
+                if comm not in in_commons:
+                    in_commons.append(comm) 
+                    
             width = getattr(out_abs_graphs[i],"width")
             height = getattr(out_abs_graphs[i],"height")   
             out_comm = out_abs_graphs[i].find_common_descendants()

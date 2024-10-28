@@ -719,6 +719,17 @@ class ARCGraph:
             x = (filtered_point[1] + relative_point[1]) // 2
             return (y, x)
 
+    def analyze_symmetry(self, node): 
+        component = self.undo_abstraction(node) #  only colorize subnodes of abstraced component node
+        symmetries = nx.isomorphism.ISMAGS.analyze_symmetry(self, component, set(component.graph.nodes), {e: 0 for e in component.graph.edges})
+        return symmetries
+        
+    def get_largest_common_subgraph(self, graph):
+        ismags = nx.isomorphism.ISMAGS(self.graph, graph)
+        graphs = list(ismags.largest_common_subgraph())
+        return graphs
+    
+               
     # ------------------------------------------ apply -----------------------------------
     def apply(self, filters, filter_params, transformation, transformation_params):
         """
@@ -809,7 +820,7 @@ class ARCGraph:
                 max_id = max(max_id, node[1])
         return (color, max_id + 1)
 
-    def undo_abstraction(self):
+    def undo_abstraction(self, component=None): # by default undo all components
         """
         undo the abstraction to get the corresponding 2D grid
         return it as an ARCGraph object
@@ -820,19 +831,21 @@ class ARCGraph:
         nx.set_node_attributes(reconstructed_graph, self.image.background_color, "color")
 
         if self.abstraction in self.image.multicolor_abstractions:
-            for component, data in self.graph.nodes(data=True):
-                for i, node in enumerate(data["nodes"]):
-                    try:
-                        reconstructed_graph.nodes[node]["color"] = data["color"][i]
-                    except: # KeyError:  # ignore pixels outside of frame
-                        pass
+            for comp, data in self.graph.nodes(data=True):
+                if component == None or comp == component: 
+                    for i, node in enumerate(data["nodes"]):
+                        try:
+                            reconstructed_graph.nodes[node]["color"] = data["color"][i]
+                        except: # KeyError:  # ignore pixels outside of frame
+                            pass
         else:
-            for component, data in self.graph.nodes(data=True):
-                for node in data["nodes"]: # subnodes of abstraced component node 
-                    try:
-                        reconstructed_graph.nodes[node]["color"] = data["color"]
-                    except: #KeyError:  # ignore pixels outside of frame
-                        pass
+            for comp, data in self.graph.nodes(data=True):
+                if component == None or comp == component: 
+                    for node in data["nodes"]: # subnodes of abstraced component node 
+                        try:
+                            reconstructed_graph.nodes[node]["color"] = data["color"]
+                        except: #KeyError:  # ignore pixels outside of frame
+                            pass
 
         return ARCGraph(reconstructed_graph, self.name + "_X", self.image, None)
 

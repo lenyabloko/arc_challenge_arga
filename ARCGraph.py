@@ -52,7 +52,49 @@ class ARCGraph:
         self.height = max([node[0] for node in self.image.graph.nodes()]) + 1
         self.task_id = name.split("_")[0]
         self.save_dir = self.img_dir + "/" + self.task_id
+    
+    def is_directed(self):
+        return True
 
+    def find_common_reachable_hubs(self):
+        descendants = {}
+        for node in self.graph.nodes():
+            descendants[node] = nx.descendants(self.graph, node)
+        return descendants
+    
+    def identify_hubs(self, descendants, threshold):
+        hubs = []
+        for node, des in descendants.items():
+            if len(des) >= threshold:
+                hubs.append(node)
+        return hubs
+        
+    def find_common_reachable_nodes(self, hubs, descendants): # or ancestors (see below)
+        common_reachable = {}
+        for i in range(len(hubs)):
+            for j in range(i + 1, len(hubs)):
+                hub1 = hubs[i]
+                hub2 = hubs[j]
+                common_reachable[(hub1, hub2)] = descendants[hub1] & descendants[hub2]
+        return common_reachable
+
+    def find_common_ancestors(self):
+        descendants = self.find_common_reachable_hubs()
+        hubs = self.identify_hubs(descendants, 2) # at least two decendants to qualify as hub
+        common_reachable = self.find_common_reachable_nodes(hubs, descendants)
+        return common_reachable
+    
+    def find_common_descendants(self):
+        ancestors = self.find_ancestors()
+        sinks = self.identify_hubs(ancestors, 2) # at least two ancestors to qualify as hub
+        return sinks
+    
+    def find_ancestors(self):
+        ancestors = {}
+        for node in self.graph.nodes():
+            ancestors[node] = nx.ancestors(self.graph, node)
+        return ancestors
+    
     # ------------------------------------- filters ------------------------------------------
     #  filters take the form of filter(node, params), return true if node satisfies filter
     def filter_by_color(self, node, color: int, exclude: bool = False):

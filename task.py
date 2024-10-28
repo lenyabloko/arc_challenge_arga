@@ -243,7 +243,7 @@ class Task:
             in_abstracted_graphs[abstraction] = self.input_abstracted_graphs_original[abstraction]
             out_abstracted_graphs[abstraction] = self.output_abstracted_graphs_original[abstraction]
 
-            self.check_for_isomorph(in_abstracted_graphs[abstraction], out_abstracted_graphs[abstraction])
+            self.find_common_surfaces(in_abstracted_graphs[abstraction], out_abstracted_graphs[abstraction])
             
             # get the list of object sizes and degrees in self.input_abstracted_graphs_original[abstraction]
             self.get_static_object_attributes(abstraction)
@@ -326,13 +326,30 @@ class Task:
             self.skip_abstractions.add(self.abstraction)
         return
     
-    def check_for_isomorph(self, in_abs_graphs, out_abs_graphs):
+    def list_isomorph(self, in_abs_graphs, out_abs_graphs):
         for i, in_abs_graph in enumerate(in_abs_graphs):
             ismags = nx.isomorphism.ISMAGS(in_abs_graph.graph, out_abs_graphs[i].graph)
-            mcs = ismags.largest_common_subgraph()
-            print(mcs)
-            #in_abs_graph.plot(save_fig=True, file_name=in_abs_graph.name + "_common")       
-
+            graphs = list(ismags.largest_common_subgraph())
+        return graphs
+           
+    def find_common_surfaces(self, in_abs_graphs, out_abs_graphs):
+        in_commons = []
+        out_commons = []
+        for i, in_abs_graph in enumerate(in_abs_graphs):
+            width = getattr(in_abs_graph,"width")
+            height = getattr(in_abs_graph,"height")
+            in_comm = in_abs_graph.find_common_descendants()
+            if in_comm not in in_commons:
+               in_commons.append(in_comm) 
+               
+            width = getattr(out_abs_graphs[i],"width")
+            height = getattr(out_abs_graphs[i],"height")   
+            out_comm = out_abs_graphs[i].find_common_descendants()
+            if out_comm not in out_commons:
+               out_commons.append(out_comm)
+               
+        return out_comm   
+       
     def search_shared_frontier(self):
         """
         perform one iteration of search for a solution using a shared frontier

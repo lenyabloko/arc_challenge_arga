@@ -93,7 +93,7 @@ class Image:
         if not graph:
             graph = self.graph
 
-        color_connected_components_graph = nx.Graph()
+        color_connected_components_graph = nx.DiGraph()
 
         # for color in self.colors_included:
         for color in range(10):
@@ -138,7 +138,7 @@ class Image:
         """
         if not graph:
             graph = self.graph
-        ccgbr = nx.Graph()
+        ccgbr = nx.DiGraph()
 
         for color in range(10):
             color_nodes = (node for node, data in graph.nodes(data=True) if data.get("color") == color)
@@ -187,7 +187,7 @@ class Image:
         if not graph:
             graph = self.graph
 
-        ccgbr2 = nx.Graph()
+        ccgbr2 = nx.DiGraph()
 
         for color in range(10):
             color_nodes = (node for node, data in graph.nodes(data=True) if data.get("color") == color)
@@ -239,7 +239,7 @@ class Image:
         if not graph:
             graph = self.graph
 
-        non_background_vertical_connected_components_graph = nx.Graph()
+        non_background_vertical_connected_components_graph = nx.DiGraph()
 
         for color in range(10):
             color_connected_components = []
@@ -289,7 +289,7 @@ class Image:
         if not graph:
             graph = self.graph
 
-        non_background_horizontal_connected_components_graph = nx.Graph()
+        non_background_horizontal_connected_components_graph = nx.DiGraph()
 
         # for color in self.colors_included:
         for color in range(10):
@@ -339,7 +339,7 @@ class Image:
         if not graph:
             graph = self.graph
 
-        non_black_components_graph = nx.Graph()
+        non_black_components_graph = nx.DiGraph()
 
         # for color in self.colors_included:
         for color in range(10):
@@ -400,7 +400,7 @@ class Image:
                         return False
             return True
 
-        lrg = nx.Graph()
+        lrg = nx.DiGraph()
         for color in range(10):
             if color == 0:
                 continue
@@ -457,7 +457,7 @@ class Image:
         """
         if not graph:
             graph = self.graph
-        multicolor_connected_components_graph = nx.Graph()
+        multicolor_connected_components_graph = nx.DiGraph()
 
         non_background_nodes = [node for node, data in graph.nodes(data=True) if data["color"] != self.background_color]
         color_subgraph = graph.subgraph(non_background_nodes)
@@ -505,7 +505,7 @@ class Image:
         if not graph:
             graph = self.graph
 
-        no_abs_graph = nx.Graph()
+        no_abs_graph = nx.DiGraph()
         sub_nodes = []
         sub_nodes_color = []
         for node, data in graph.nodes(data=True):

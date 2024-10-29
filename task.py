@@ -241,9 +241,14 @@ class Task:
             
             in_abstracted_graphs[abstraction] = self.input_abstracted_graphs_original[abstraction]
             out_abstracted_graphs[abstraction] = self.output_abstracted_graphs_original[abstraction]
-
-            in_components, out_component = self.find_common_components(in_abstracted_graphs[abstraction], out_abstracted_graphs[abstraction])
-            
+            in_components, out_components = self.find_common_components(in_abstracted_graphs[abstraction], out_abstracted_graphs[abstraction])
+            for name,componnents in in_components.items():
+                for g in componnents:
+                    g.plot(save_fig=True) 
+            for name,componnents in out_components.items():
+                for g in componnents:
+                    g.plot(save_fig=True)
+                
             # get the list of object sizes and degrees in self.input_abstracted_graphs_original[abstraction]
             self.get_static_object_attributes(abstraction)
 
@@ -334,21 +339,21 @@ class Task:
         in_components = {}
         out_components = {}
         for i, in_abs_graph in enumerate(in_abs_graphs):
-            in_components[str(i)] = []
+            in_components[in_abs_graph.name] = []
             comms = in_abs_graph.find_common_descendants()
-            for comm in comms:
-                components = in_abs_graph.decompose_by(comm)
-                components.plot()
-                if components not in in_components[str(i)]:
-                    in_components[str(i)].append(components) 
-             
-            out_components[str(i)] = []          
-            comms = out_abs_graphs[i].find_common_descendants() 
-            for comm in comms:
-                components = out_abs_graphs[i].decompose_by(comm)
-                if components not in out_components[str(i)]:
-                    out_components[str(i)].append(components)
-            
+            components = in_abs_graph.decompose_by(comms) 
+            for j, component in enumerate(components):
+                name = in_abs_graph.name + "_Y_{}".format(j+1)
+                in_components[in_abs_graph.name].append(ARCGraph(component,name,Image(self,graph=component,name=name)))    
+        
+            out_abs_graph = out_abs_graphs[i]
+            out_components[out_abs_graph.name] = []         
+            comms = out_abs_graph.find_common_descendants() 
+            components = out_abs_graph.decompose_by(comms)        
+            for j, component in enumerate(components):
+                name = out_abs_graph.name + "_Y_{}".format(j+1)
+                out_components[out_abs_graph.name].append(ARCGraph(component,name,Image(self,graph=component,name=name)))    
+           
         return in_components, out_components  
        
     def search_shared_frontier(self):

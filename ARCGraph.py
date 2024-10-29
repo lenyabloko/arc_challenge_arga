@@ -853,7 +853,7 @@ class ARCGraph:
 
         return ARCGraph(reconstructed_graph, self.name + "_X", self.image, None)
 
-    def decompose_by(self, components=None):
+    def decompose_by(self, commons=None): # all common sink nodes of abstracted graph
         """
         undo the abstraction to get 2D grids corresponding to components removed
         return all resulting ARCGraph objects
@@ -866,8 +866,8 @@ class ARCGraph:
         if self.abstraction in self.image.multicolor_abstractions:
             for comp, data in self.graph.nodes(data=True):
                 for i, node in enumerate(data["nodes"]):
-                    if components != None and comp in components:
-                        reconstructed_graph.remove_nodes_from(node)
+                    if commons != None and comp in commons:
+                        reconstructed_graph.remove_node(node)
                     else:    
                         try:
                             reconstructed_graph.nodes[node]["color"] = data["color"][i]
@@ -876,15 +876,20 @@ class ARCGraph:
         else:
             for comp, data in self.graph.nodes(data=True):
                 for node in data["nodes"]: # subnodes of abstraced component node 
-                    if components != None and comp in components:
-                        reconstructed_graph.remove_nodes_from(node)
+                    if commons != None and comp in commons:
+                        reconstructed_graph.remove_node(node)
                     else:    
                         try:
                             reconstructed_graph.nodes[node]["color"] = data["color"]
                         except: #KeyError:  # ignore pixels outside of frame
                             pass
 
-        return ARCGraph(reconstructed_graph, self.name + "_Y", self.image, None)
+        components = []                    
+        for i, component in enumerate(nx.connected_components(reconstructed_graph)):
+            graph = reconstructed_graph.subgraph(component)
+            components.append(graph)    
+                            
+        return components
 
 
     def update_abstracted_graph(self, affected_nodes):

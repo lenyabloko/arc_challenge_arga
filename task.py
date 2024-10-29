@@ -242,7 +242,7 @@ class Task:
             in_abstracted_graphs[abstraction] = self.input_abstracted_graphs_original[abstraction]
             out_abstracted_graphs[abstraction] = self.output_abstracted_graphs_original[abstraction]
 
-            self.find_common_surfaces(in_abstracted_graphs[abstraction], out_abstracted_graphs[abstraction])
+            in_components, out_component = self.find_common_components(in_abstracted_graphs[abstraction], out_abstracted_graphs[abstraction])
             
             # get the list of object sizes and degrees in self.input_abstracted_graphs_original[abstraction]
             self.get_static_object_attributes(abstraction)
@@ -327,29 +327,29 @@ class Task:
     
     def list_isomorph(self, in_abs_graphs, out_abs_graphs):
         for i, in_abs_graph in enumerate(in_abs_graphs):
-            grpahs = in_abs_graph.graph.get(out_abs_graphs[i].graph)
+            graphs = in_abs_graph.graph.get(out_abs_graphs[i].graph)
         return list(graphs)
-           
-    def find_common_surfaces(self, in_abs_graphs, out_abs_graphs):
-        in_commons = []
-        out_commons = []
-        for i, in_abs_graph in enumerate(in_abs_graphs):
-            #width = getattr(in_abs_graph,"width")
-            #height = getattr(in_abs_graph,"height")
-            width, height = in_abs_graph.image.image_size
-            in_comms = in_abs_graph.find_common_descendants()
-            for comm in in_comms:
-                #symmetries = in_abs_graph.analyze_symmetry(comm)
-                if comm not in in_commons:
-                    in_commons.append(comm) 
-                    
-            width = getattr(out_abs_graphs[i],"width")
-            height = getattr(out_abs_graphs[i],"height")   
-            out_comm = out_abs_graphs[i].find_common_descendants()
-            if out_comm not in out_commons:
-               out_commons.append(out_comm)
                
-        return out_comm   
+    def find_common_components(self, in_abs_graphs, out_abs_graphs):
+        in_components = {}
+        out_components = {}
+        for i, in_abs_graph in enumerate(in_abs_graphs):
+            in_components[str(i)] = []
+            comms = in_abs_graph.find_common_descendants()
+            for comm in comms:
+                components = in_abs_graph.decompose_by(comm)
+                components.plot()
+                if components not in in_components[str(i)]:
+                    in_components[str(i)].append(components) 
+             
+            out_components[str(i)] = []          
+            comms = out_abs_graphs[i].find_common_descendants() 
+            for comm in comms:
+                components = out_abs_graphs[i].decompose_by(comm)
+                if components not in out_components[str(i)]:
+                    out_components[str(i)].append(components)
+            
+        return in_components, out_components  
        
     def search_shared_frontier(self):
         """

@@ -146,7 +146,7 @@ if __name__ == "__main__":
 
     task_type = 'training'
 
-    task_no = 15
+    task_no = 5
 
     t = list(training_challenges)[task_no]
     train= training_challenges[t]

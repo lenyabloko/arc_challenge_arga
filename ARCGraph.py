@@ -729,6 +729,10 @@ class ARCGraph:
         graphs = list(ismags.largest_common_subgraph())
         return graphs
     
+    def get_decomposition_at(self, nodes):
+        for node in nodes: 
+            components = self.decompose_by(node)
+        return components    
                
     # ------------------------------------------ apply -----------------------------------
     def apply(self, filters, filter_params, transformation, transformation_params):
@@ -848,6 +852,40 @@ class ARCGraph:
                             pass
 
         return ARCGraph(reconstructed_graph, self.name + "_X", self.image, None)
+
+    def decompose_by(self, components=None):
+        """
+        undo the abstraction to get 2D grids corresponding to components removed
+        return all resulting ARCGraph objects
+        """
+
+        width, height = self.image.image_size
+        reconstructed_graph = nx.grid_2d_graph(height, width)
+        nx.set_node_attributes(reconstructed_graph, self.image.background_color, "color")
+
+        if self.abstraction in self.image.multicolor_abstractions:
+            for comp, data in self.graph.nodes(data=True):
+                for i, node in enumerate(data["nodes"]):
+                    if components != None and comp in components:
+                        reconstructed_graph.remove_nodes_from(node)
+                    else:    
+                        try:
+                            reconstructed_graph.nodes[node]["color"] = data["color"][i]
+                        except: # KeyError:  # ignore pixels outside of frame
+                            pass
+        else:
+            for comp, data in self.graph.nodes(data=True):
+                for node in data["nodes"]: # subnodes of abstraced component node 
+                    if components != None and comp in components:
+                        reconstructed_graph.remove_nodes_from(node)
+                    else:    
+                        try:
+                            reconstructed_graph.nodes[node]["color"] = data["color"]
+                        except: #KeyError:  # ignore pixels outside of frame
+                            pass
+
+        return ARCGraph(reconstructed_graph, self.name + "_Y", self.image, None)
+
 
     def update_abstracted_graph(self, affected_nodes):
         """

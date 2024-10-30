@@ -142,14 +142,15 @@ class Task:
                 for i, g in enumerate(self.input_abstracted_graphs_original[self.abstraction]):        
                     if self.solutions[i] == None:
                        break
-                    for solution in self.solutions[i]:
-                        for j, call in enumerate(solution):
+                    for j, solution in enumerate(self.solutions[i]):
+                        for k, call in enumerate(solution):
                             self.solution_apply_calls.append(call)
                             g.apply(**call)
-                            g.plot(save_fig=True, file_name=g.name + "_{}".format(i+1))
+                        if self.save_images: # plot each solution as _xj   
+                            g.plot(save_fig=True, file_name=g.name + "_x{}".format(j))
                             reconstructed = self.train_input[i].undo_abstraction(g)
                             reconstructed.plot(save_fig=True)
-                            self.train_output[i].arc_graph.plot(save_fig=True)
+                    self.train_output[i].arc_graph.plot(save_fig=True)
                        
                     # apply to test image
                     test_input = self.test_input[0]
@@ -189,7 +190,7 @@ class Task:
         for i, g in enumerate(self.input_abstracted_graphs_original[self.abstraction]):
             for call in self.solution_apply:        
                 g.apply(**call)
-            g.plot(save_fig=True, file_name=g.name+"_"+str(i+1)+"_out")
+            g.plot(save_fig=True, file_name=g.name+"_out")
     
         solving_time = time.time() - self.start_time
         nodes_explored = {"total_nodes_explored": self.total_nodes_explored,
@@ -213,9 +214,9 @@ class Task:
             out_image = self.train_output[i]   
             if in_image.image_size != out_image.image_size:
                 compatible = False
-            if self.save_images:    
-                in_image.arc_graph.plot(save_fig=True)  
-                out_image.arc_graph.plot(save_fig=True)       
+            #if self.save_images:    
+            in_image.arc_graph.plot(save_fig=True)  
+            out_image.arc_graph.plot(save_fig=True)       
 
         in_abstracted_graphs = {}  # keep track of existing abstracted graphs to check for duplication
         out_abstracted_graphs = {}
@@ -241,22 +242,30 @@ class Task:
             self.output_abstracted_graphs_original[abstraction] = \
                 [getattr(output, Image.abstraction_ops[abstraction])() for output in self.train_output]
             
+            self.skip_duplicates(in_abstracted_graphs, abstraction)
+            
             in_abstracted_graphs[abstraction] = self.input_abstracted_graphs_original[abstraction]
             out_abstracted_graphs[abstraction] = self.output_abstracted_graphs_original[abstraction]
             
-            self.skip_duplicates(in_abstracted_graphs, abstraction)
-            
-            if not compatible:    
+            match_in = {}
+            match_out = {}
+            if abstraction == "nbccg" and not compatible:    
                 decomposition = self.decompose(in_abstracted_graphs[abstraction], out_abstracted_graphs[abstraction])     
-                for name, componnents in decomposition.items():
+                for name, componnents in decomposition.items(): #ex. name '0520fde7_1_train_in_nbccg'
+                    match_in[name] = []
+                    match_out[name] = []
                     if len(componnents) > 1:
-                        for i, in_abs_graph in enumerate(in_abstracted_graphs[abstraction]):
-                            for g in decomposition[in_abs_graph.name]:
-                                out_abs_graph = out_abstracted_graphs[abstraction][i]
-                                for out_graph in decomposition[out_abs_graph.name]:
-                                    if out_graph.image.image_size == g.image.image_size:
-                                        g.plot(save_fig=True)
-                                       
+                        if "_in_" in name:
+                            match_in[name].append(self.match(decomposition, in_abstracted_graphs[abstraction], out_abstracted_graphs[abstraction]))
+                        if "_out_" in name:
+                            match_out[name].append(self.match(decomposition, out_abstracted_graphs[abstraction], in_abstracted_graphs[abstraction]))    
+                
+                    if len(match_in[name]) > 0 and len(match_out[name]) == 0:
+                        print(name+": {} to one".format(len(match_in[name])))
+                    if len(match_out[name]) > 0 and len(match_in[name]) == 0:    
+                        print(name+": One to {}".format(len(match_out[name])))    
+                
+                        
             # get the list of object sizes and degrees in self.input_abstracted_graphs_original[abstraction]
             self.get_static_object_attributes(abstraction)
 
@@ -333,11 +342,23 @@ class Task:
             else:  # did not break, found match for all instances
                 found_match = True
                 break
-            
-        print("Skipping abstraction {} = {}".format(abstraction, i))
-        self.skip_abstractions.add(self.abstraction)        
+        if found_match:    
+            print("Skipping abstraction {} = {}".format(abstraction, i))
+            self.skip_abstractions.add(self.abstraction)        
         return found_match
     
+    def match(self, decomposition, in_abs_graphs, out_abs_graphs):
+        matching = []
+        for i, in_abs_graph in enumerate(in_abs_graphs):
+            for g in decomposition[in_abs_graph.name]:
+                out_abs_graph = out_abs_graphs[i]
+                for out_graph in decomposition[out_abs_graph.name]:
+                    if out_graph.image.image_size == g.image.image_size:
+                        matching.append(g)
+                        if self.save_images:
+                            g.plot(save_fig=True)
+        return matching                        
+        
     def list_isomorph(self, in_abs_graphs, out_abs_graphs):
         for i, in_abs_graph in enumerate(in_abs_graphs):
             graphs = in_abs_graph.graph.get(out_abs_graphs[i].graph)

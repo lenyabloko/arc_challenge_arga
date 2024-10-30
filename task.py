@@ -114,12 +114,7 @@ class Task:
             self.frontier = PriorityQueue()  # frontier for search, each item is a PriorityItem object
         else:
             self.frontier = dict()  # maintain a separate frontier for each abstraction
-    
-        for input in self.train_input:
-            input.arc_graph.plot(save_fig=True)
-        for output in self.train_output:
-            output.arc_graph.plot(save_fig=True)    
-    
+        
         print("Running task.solve() for #{}".format(self.task_id), flush=True)
         self.start_time = time.time()
 
@@ -132,6 +127,10 @@ class Task:
                 solution = self.search_shared_frontier()
             else:
                 solution = self.search_separate_frontier()
+            if solution == None:
+                print("Failed to initialize")
+                return
+               
             if solution.priority == 0:
                 solutions = self.solutions[solution.name] 
                 if solutions == None or len(solutions) == 0:
@@ -205,7 +204,18 @@ class Task:
         initializes frontier
         :return: True if a solution is found during initialization or time limit has been reached, False otherwise
         """
+        assert(len(self.train_input)==len(self.train_output))
+        
         print("Initializing Frontiers")
+        
+        compatible = True
+        for i, in_image in enumerate(self.train_input):
+            out_image = self.train_output[i]   
+            if in_image.image_size != out_image.image_size:
+                compatible = False
+            if self.save_images:    
+                in_image.arc_graph.plot(save_fig=True)  
+                out_image.arc_graph.plot(save_fig=True)       
 
         in_abstracted_graphs = {}  # keep track of existing abstracted graphs to check for duplication
         out_abstracted_graphs = {}
@@ -231,24 +241,22 @@ class Task:
             self.output_abstracted_graphs_original[abstraction] = \
                 [getattr(output, Image.abstraction_ops[abstraction])() for output in self.train_output]
             
-            self.skip_duplicates(in_abstracted_graphs, abstraction)
-            
-            #if self.save_images:
-            for i, g in enumerate(self.input_abstracted_graphs_original[self.abstraction]):
-                g.plot(save_fig=True)
-            for i, g in enumerate(self.output_abstracted_graphs_original[self.abstraction]):
-                g.plot(save_fig=True)    
-            
             in_abstracted_graphs[abstraction] = self.input_abstracted_graphs_original[abstraction]
             out_abstracted_graphs[abstraction] = self.output_abstracted_graphs_original[abstraction]
-            in_components, out_components = self.find_common_components(in_abstracted_graphs[abstraction], out_abstracted_graphs[abstraction])
-            for name,componnents in in_components.items():
-                for g in componnents:
-                    g.plot(save_fig=True) 
-            for name,componnents in out_components.items():
-                for g in componnents:
-                    g.plot(save_fig=True)
-                
+            
+            self.skip_duplicates(in_abstracted_graphs, abstraction)
+            
+            if not compatible:    
+                decomposition = self.decompose(in_abstracted_graphs[abstraction], out_abstracted_graphs[abstraction])     
+                for name, componnents in decomposition.items():
+                    if len(componnents) > 1:
+                        for i, in_abs_graph in enumerate(in_abstracted_graphs[abstraction]):
+                            for g in decomposition[in_abs_graph.name]:
+                                out_abs_graph = out_abstracted_graphs[abstraction][i]
+                                for out_graph in decomposition[out_abs_graph.name]:
+                                    if out_graph.image.image_size == g.image.image_size:
+                                        g.plot(save_fig=True)
+                                       
             # get the list of object sizes and degrees in self.input_abstracted_graphs_original[abstraction]
             self.get_static_object_attributes(abstraction)
 
@@ -325,36 +333,34 @@ class Task:
             else:  # did not break, found match for all instances
                 found_match = True
                 break
-        if found_match:  # found matching node for all nodes in all abstractions
-            print("Skipping abstraction {} = {}".format(abstraction, i))
-            self.skip_abstractions.add(self.abstraction)
-        return
+            
+        print("Skipping abstraction {} = {}".format(abstraction, i))
+        self.skip_abstractions.add(self.abstraction)        
+        return found_match
     
     def list_isomorph(self, in_abs_graphs, out_abs_graphs):
         for i, in_abs_graph in enumerate(in_abs_graphs):
             graphs = in_abs_graph.graph.get(out_abs_graphs[i].graph)
         return list(graphs)
                
-    def find_common_components(self, in_abs_graphs, out_abs_graphs):
-        in_components = {}
-        out_components = {}
+    def decompose(self, in_abs_graphs, out_abs_graphs):
+        decomposition = {}
         for i, in_abs_graph in enumerate(in_abs_graphs):
-            in_components[in_abs_graph.name] = []
+            decomposition[in_abs_graph.name] = []
             comms = in_abs_graph.find_common_descendants()
             components = in_abs_graph.decompose_by(comms) 
             for j, component in enumerate(components):
                 name = in_abs_graph.name + "_Y_{}".format(j+1)
-                in_components[in_abs_graph.name].append(ARCGraph(component,name,Image(self,graph=component,name=name)))    
+                decomposition[in_abs_graph.name].append(ARCGraph(component,name,Image(self,graph=component,name=name)))    
         
             out_abs_graph = out_abs_graphs[i]
-            out_components[out_abs_graph.name] = []         
+            decomposition[out_abs_graph.name] = []         
             comms = out_abs_graph.find_common_descendants() 
             components = out_abs_graph.decompose_by(comms)        
             for j, component in enumerate(components):
                 name = out_abs_graph.name + "_Y_{}".format(j+1)
-                out_components[out_abs_graph.name].append(ARCGraph(component,name,Image(self,graph=component,name=name)))    
-           
-        return in_components, out_components  
+                decomposition[out_abs_graph.name].append(ARCGraph(component,name,Image(self,graph=component,name=name)))    
+        return decomposition  
        
     def search_shared_frontier(self):
         """

@@ -247,8 +247,7 @@ class Task:
             in_abstracted_graphs[abstraction] = self.input_abstracted_graphs_original[abstraction]
             out_abstracted_graphs[abstraction] = self.output_abstracted_graphs_original[abstraction]
             if abstraction == "nbccg" and not compatible: # ex. in and out images size is different   
-                self.input_abstracted_graphs_original[abstraction], self.output_abstracted_graphs_original[abstraction] = \
-                    self.fold(in_abstracted_graphs[abstraction], out_abstracted_graphs[abstraction])
+                in_abs_graphs, out_abs_graphs = self.fold(in_abstracted_graphs[abstraction], out_abstracted_graphs[abstraction])
                         
             # get the list of object sizes and degrees in self.input_abstracted_graphs_original[abstraction]
             self.get_static_object_attributes(abstraction)
@@ -360,22 +359,32 @@ class Task:
             
         if len(match_in) > 0:
             for name, components in match_in.items():
-                print(name+": {} to one".format(len(components)))
-                component = iter(components)
-                in_graph = component.next()
-                if in_graph != None:
-                   in_graph.plot(save_fig=True)  
+                print(name+": {} to one fold".format(len(components)))
+                overlay = None
+                background_color = 0
+                for i, component in enumerate(components):
+                    if not overlay:
+                        background_color = component.image.background_color
+                        image = Image(self, overlay, component.width, component.height, overlay, component.name[-2])
+                        overlay = image.arc_graph
+                        overlay.image.background_color = background_color
+            
+                    next = components[i+1]
+                    mapping = next.map(next,component)
+                    if next != None:
+                        for node, data in component.graph.nodes(data=True):
+                            component_color = data["color"]
+                            next_color = next.graph.nodes[node]["color"]
+                            if component_color != background_color and next_color != next.image.background_color:
+                                overlay.nodes[node]["color"] = component_color     
+    
+            overlay.plot(save_fig=True)  
                         
-                #print(abs+": One to {}".format(len(components)))    
+        #print(name+": One to {}".format(len(components)))    
 
         # return modified copies!
         return in_abstracted_graphs, out_abstracted_graphs
-        
-    def list_isomorph(self, in_abs_graphs, out_abs_graphs):
-        for i, in_abs_graph in enumerate(in_abs_graphs):
-            graphs = in_abs_graph.graph.get(out_abs_graphs[i].graph)
-        return list(graphs)
-               
+                    
     def decompose(self, in_abs_graphs, out_abs_graphs):
         decomposition = {}
         for i, in_abs_graph in enumerate(in_abs_graphs):
@@ -395,6 +404,11 @@ class Task:
                 decomposition[out_abs_graph.name].append(ARCGraph(component,name,Image(self,graph=component,name=name)))    
         return decomposition  
        
+    def list_isomorph(self, in_abs_graphs, out_abs_graphs):
+        for i, in_abs_graph in enumerate(in_abs_graphs):
+            graphs = in_abs_graph.graph.get(out_abs_graphs[i].graph)
+        return list(graphs)
+      
     def search_shared_frontier(self):
         """
         perform one iteration of search for a solution using a shared frontier
@@ -583,9 +597,7 @@ class Task:
                         
                 #for i, output in enumerate(self.train_output): # superimpose ouptut over transformed input 
                 # create ARCGraph using input image.width/height/background_color, and color the graph
-                # each component node of transformed abstracted grpah contains corresponding subnodes 
-                # use component's color to color each reconstructed subnode into the color of component
-                image = self.train_input[i] # Image of original input is used to undo abstraction
+                image = self.train_input[i] # image of original input is used to undo abstraction
                 reconstructed = image.undo_abstraction(input_abstracted_copy) # working copy after apply_calls
 
                 token_string = ''

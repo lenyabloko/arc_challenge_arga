@@ -1,3 +1,5 @@
+import networkx as nx
+
 from networkx.algorithms.components import connected_components
 from ARCGraph import *
 

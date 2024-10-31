@@ -724,6 +724,10 @@ class ARCGraph:
         symmetries = nx.isomorphism.ISMAGS.analyze_symmetry(self, component, set(component.graph.nodes), {e: 0 for e in component.graph.edges})
         return symmetries
         
+    def map(self, G1,G2):
+        GM = nx.algorithms.isomorphism.GraphMatcher(G1,G2)
+        return GM.subgraph_isomorphisms_iter()
+        
     def get_largest_common_subgraph(self, graph):
         ismags = nx.isomorphism.ISMAGS(self.graph, graph)
         graphs = list(ismags.largest_common_subgraph())

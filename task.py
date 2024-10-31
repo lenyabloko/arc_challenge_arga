@@ -246,25 +246,9 @@ class Task:
             
             in_abstracted_graphs[abstraction] = self.input_abstracted_graphs_original[abstraction]
             out_abstracted_graphs[abstraction] = self.output_abstracted_graphs_original[abstraction]
-            
-            match_in = {}
-            match_out = {}
-            if abstraction == "nbccg" and not compatible:    
-                decomposition = self.decompose(in_abstracted_graphs[abstraction], out_abstracted_graphs[abstraction])     
-                for name, componnents in decomposition.items(): #ex. name '0520fde7_1_train_in_nbccg'
-                    match_in[name] = []
-                    match_out[name] = []
-                    if len(componnents) > 1:
-                        if "_in_" in name:
-                            match_in[name].append(self.match(decomposition, in_abstracted_graphs[abstraction], out_abstracted_graphs[abstraction]))
-                        if "_out_" in name:
-                            match_out[name].append(self.match(decomposition, out_abstracted_graphs[abstraction], in_abstracted_graphs[abstraction]))    
-                
-                    if len(match_in[name]) > 0 and len(match_out[name]) == 0:
-                        print(name+": {} to one".format(len(match_in[name])))
-                    if len(match_out[name]) > 0 and len(match_in[name]) == 0:    
-                        print(name+": One to {}".format(len(match_out[name])))    
-                
+            if abstraction == "nbccg" and not compatible: # ex. in and out images size is different   
+                self.input_abstracted_graphs_original[abstraction], self.output_abstracted_graphs_original[abstraction] = \
+                    self.fold(in_abstracted_graphs[abstraction], out_abstracted_graphs[abstraction])
                         
             # get the list of object sizes and degrees in self.input_abstracted_graphs_original[abstraction]
             self.get_static_object_attributes(abstraction)
@@ -347,17 +331,45 @@ class Task:
             self.skip_abstractions.add(self.abstraction)        
         return found_match
     
-    def match(self, decomposition, in_abs_graphs, out_abs_graphs):
-        matching = []
+    def match_size(self, decomposition, in_abs_graphs, out_abs_graphs):
+        matching = {}
         for i, in_abs_graph in enumerate(in_abs_graphs):
-            for g in decomposition[in_abs_graph.name]:
+            matching[in_abs_graph.name] = []
+            for in_graph in decomposition[in_abs_graph.name]:
                 out_abs_graph = out_abs_graphs[i]
                 for out_graph in decomposition[out_abs_graph.name]:
-                    if out_graph.image.image_size == g.image.image_size:
-                        matching.append(g)
+                    if out_graph.image.image_size == in_graph.image.image_size:
+                        matching[in_abs_graph.name].append(in_graph)
                         if self.save_images:
-                            g.plot(save_fig=True)
+                            in_graph.plot(save_fig=True)
         return matching                        
+    
+    def fold(self, in_abstracted_graphs, out_abstracted_graphs):
+        match_in = {}
+        match_out = {}
+        decomposition = self.decompose(in_abstracted_graphs, out_abstracted_graphs)     
+        for name, components in decomposition.items(): #ex. name '0520fde7_1_train_in_nbccg'
+            if len(components) > 1:
+                if "_in_" in name:
+                    match_in = self.match_size(decomposition, in_abstracted_graphs, out_abstracted_graphs)
+                if "_out_" in name:
+                    match_out = self.match_size(decomposition, out_abstracted_graphs, in_abstracted_graphs)  
+        
+        if len(match_in) == 0 and len(match_out) == 0:
+            print("Failed to decompose abstraction!") 
+            
+        if len(match_in) > 0:
+            for name, components in match_in.items():
+                print(name+": {} to one".format(len(components)))
+                component = iter(components)
+                in_graph = component.next()
+                if in_graph != None:
+                   in_graph.plot(save_fig=True)  
+                        
+                #print(abs+": One to {}".format(len(components)))    
+
+        # return modified copies!
+        return in_abstracted_graphs, out_abstracted_graphs
         
     def list_isomorph(self, in_abs_graphs, out_abs_graphs):
         for i, in_abs_graph in enumerate(in_abs_graphs):
@@ -625,7 +637,7 @@ class Task:
                         except:
                             print("Failed to plot graph: {}".format(input_abstracted_copy.name + "_"  + label + token_string))
 
-                    secondary_score = len(search_path) # depth of searvh tree- how many (operations) were applied
+                    secondary_score = len(search_path) # depth of search tree- how many (operations) were applied
                     
                     # create next frontier 
                     priority_item = PriorityItem(search_path.copy(), self.abstraction, primary_score, secondary_score, i)

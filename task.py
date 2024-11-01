@@ -346,7 +346,7 @@ class Task:
     def fold(self, in_abstracted_graphs, out_abstracted_graphs):
         match_in = {}
         match_out = {}
-        decomposition = self.decompose(in_abstracted_graphs, out_abstracted_graphs)     
+        decomposition = self.carve(in_abstracted_graphs, out_abstracted_graphs)     
         for name, components in decomposition.items(): #ex. name '0520fde7_1_train_in_nbccg'
             if len(components) > 1:
                 if "_in_" in name:
@@ -370,7 +370,6 @@ class Task:
                         overlay.image.background_color = background_color
             
                     next = components[i+1]
-                    mapping = next.map(next,component)
                     if next != None:
                         for node, data in component.graph.nodes(data=True):
                             component_color = data["color"]
@@ -385,20 +384,20 @@ class Task:
         # return modified copies!
         return in_abstracted_graphs, out_abstracted_graphs
                     
-    def decompose(self, in_abs_graphs, out_abs_graphs):
+    def carve(self, in_abs_graphs, out_abs_graphs):
         decomposition = {}
         for i, in_abs_graph in enumerate(in_abs_graphs):
             decomposition[in_abs_graph.name] = []
-            comms = in_abs_graph.find_common_descendants()
-            components = in_abs_graph.decompose_by(comms) 
+            joints = in_abs_graph.find_common_descendants()
+            components = in_abs_graph.carve_at(joints, out_abs_graphs[i]) 
             for j, component in enumerate(components):
                 name = in_abs_graph.name + "_Y_{}".format(j+1)
                 decomposition[in_abs_graph.name].append(ARCGraph(component,name,Image(self,graph=component,name=name)))    
         
             out_abs_graph = out_abs_graphs[i]
             decomposition[out_abs_graph.name] = []         
-            comms = out_abs_graph.find_common_descendants() 
-            components = out_abs_graph.decompose_by(comms)        
+            joints = out_abs_graph.find_common_descendants() 
+            components = out_abs_graph.carve_at(joints, in_abs_graph)        
             for j, component in enumerate(components):
                 name = out_abs_graph.name + "_Y_{}".format(j+1)
                 decomposition[out_abs_graph.name].append(ARCGraph(component,name,Image(self,graph=component,name=name)))    

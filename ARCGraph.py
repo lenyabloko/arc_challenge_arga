@@ -857,9 +857,9 @@ class ARCGraph:
 
         return ARCGraph(reconstructed_graph, self.name + "_X", self.image, None)
 
-    def decompose_by(self, commons=None): # all common sink nodes of abstracted graph
+    def carve_at(self, joints=None, target=None): # all common sink nodes of abstracted graph
         """
-        undo the abstraction to get 2D grids corresponding to components removed
+        undo the abstraction to get 2D grids corresponding to common components removed
         return all resulting ARCGraph objects
         """
 
@@ -868,9 +868,9 @@ class ARCGraph:
         nx.set_node_attributes(reconstructed_graph, self.image.background_color, "color")
 
         if self.abstraction in self.image.multicolor_abstractions:
-            for comp, data in self.graph.nodes(data=True):
+            for cut, data in self.graph.nodes(data=True):
                 for i, node in enumerate(data["nodes"]):
-                    if commons != None and comp in commons:
+                    if joints != None and cut in joints:
                         reconstructed_graph.remove_node(node)
                     else:    
                         try:
@@ -878,9 +878,9 @@ class ARCGraph:
                         except: # KeyError:  # ignore pixels outside of frame
                             pass
         else:
-            for comp, data in self.graph.nodes(data=True):
+            for cut, data in self.graph.nodes(data=True):
                 for node in data["nodes"]: # subnodes of abstraced component node 
-                    if commons != None and comp in commons:
+                    if joints != None and cut in joints:
                         reconstructed_graph.remove_node(node)
                     else:    
                         try:
@@ -888,12 +888,20 @@ class ARCGraph:
                         except: #KeyError:  # ignore pixels outside of frame
                             pass
 
-        components = []                    
+        matching = []                    
         for i, component in enumerate(nx.connected_components(reconstructed_graph)):
-            graph = reconstructed_graph.subgraph(component)
-            components.append(graph)    
+            subgraph = reconstructed_graph.subgraph(component)  
+            if target:
+                grid = target.undo_abstraction()
+                if nx.is_isomorphic(subgraph, grid.graph):
+                    GM = nx.algorithms.isomorphism.GraphMatcher(subgraph, grid.graph)
+                    for isomorphism in GM.subgraph_isomorphisms_iter():
+                        nx.relabel_nodes(subgraph, isomorphism)
+                                
+            matching.append(subgraph)
+
                             
-        return components
+        return matching
 
 
     def update_abstracted_graph(self, affected_nodes):

@@ -339,8 +339,8 @@ class Task:
                 for out_graph in decomposition[out_abs_graph.name]:
                     if out_graph.image.image_size == in_graph.image.image_size:
                         matching[in_abs_graph.name].append(in_graph)
-                        if self.save_images:
-                            in_graph.plot(save_fig=True)
+                        #if self.save_images:
+                        in_graph.plot(save_fig=True)
         return matching                        
     
     def fold(self, in_abstracted_graphs, out_abstracted_graphs):
@@ -356,11 +356,12 @@ class Task:
         
         if len(match_in) == 0 and len(match_out) == 0:
             print("Failed to decompose abstraction!") 
-            
+        
+        overlay = None    
         if len(match_in) > 0:
             for name, components in match_in.items():
                 print(name+": {} to one fold".format(len(components)))
-                overlay = None
+
                 background_color = 0
                 for i, component in enumerate(components):
                     if not overlay:
@@ -368,16 +369,17 @@ class Task:
                         image = Image(self, overlay, component.width, component.height, overlay, component.name[-2])
                         overlay = image.arc_graph
                         overlay.image.background_color = background_color
-            
-                    next = components[i+1]
-                    if next != None:
+                        overlay.name = component.name[0:-2] + "_O"
+        
+                    if i < len(components):
+                        next = components[i]
                         for node, data in component.graph.nodes(data=True):
                             component_color = data["color"]
                             next_color = next.graph.nodes[node]["color"]
-                            if component_color != background_color and next_color != next.image.background_color:
-                                overlay.nodes[node]["color"] = component_color     
-    
-            overlay.plot(save_fig=True)  
+                            if component_color != background_color:
+                                if next_color != next.image.background_color:
+                                    overlay.graph.nodes[node]["color"] = component_color     
+                                    overlay.plot(save_fig=True)  
                         
         #print(name+": One to {}".format(len(components)))    
 
@@ -387,20 +389,35 @@ class Task:
     def carve(self, in_abs_graphs, out_abs_graphs):
         decomposition = {}
         for i, in_abs_graph in enumerate(in_abs_graphs):
+            in_graph = in_abs_graph.undo_abstraction()
+            out_abs_graph = out_abs_graphs[i]
+            out_graph = out_abs_graph.undo_abstraction()
+             
             decomposition[in_abs_graph.name] = []
             joints = in_abs_graph.find_common_descendants()
-            components = in_abs_graph.carve_at(joints, out_abs_graphs[i]) 
-            for j, component in enumerate(components):
-                name = in_abs_graph.name + "_Y_{}".format(j+1)
-                decomposition[in_abs_graph.name].append(ARCGraph(component,name,Image(self,graph=component,name=name)))    
-        
-            out_abs_graph = out_abs_graphs[i]
+            if len(joints) > 0: 
+                components = in_abs_graph.carve_at(joints)
+                for j, component in enumerate(components):
+                    name = in_abs_graph.name + "_Y_{}".format(j+1)
+                    graph = ARCGraph(component,name,Image(self,graph=component,name=name))
+                    in_graph.copy_colors_to(graph)
+                    in_abs_graph.overlap(graph, out_graph.graph)
+                    decomposition[in_abs_graph.name].append(graph)    
+            else:
+                decomposition[in_abs_graph.name].append(in_graph)    
+    
             decomposition[out_abs_graph.name] = []         
-            joints = out_abs_graph.find_common_descendants() 
-            components = out_abs_graph.carve_at(joints, in_abs_graph)        
-            for j, component in enumerate(components):
-                name = out_abs_graph.name + "_Y_{}".format(j+1)
-                decomposition[out_abs_graph.name].append(ARCGraph(component,name,Image(self,graph=component,name=name)))    
+            joints = out_abs_graph.find_common_descendants()
+            if len(joints) > 0: 
+                components = out_abs_graph.carve_at(joints)        
+                for j, component in enumerate(components):
+                    name = out_abs_graph.name + "_Y_{}".format(j+1)
+                    graph = ARCGraph(component,name,Image(self,graph=component,name=name))
+                    out_graph.copy_colors_to(graph)
+                    out_abs_graph.overlap(graph, in_graph.graph)
+                    decomposition[out_abs_graph.name].append(graph)   
+            else:
+                decomposition[out_abs_graph.name].append(out_graph)         
         return decomposition  
        
     def list_isomorph(self, in_abs_graphs, out_abs_graphs):

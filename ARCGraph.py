@@ -644,6 +644,31 @@ class ARCGraph:
                 return True
         return False
 
+    def get_relative_shift(self, grid, subgraph):
+        for node in subgraph.nodes():
+            x,y = node
+            if not node in grid:
+                return (-x,-y)      
+        return (0,0)        
+   
+    def shift_by(self, dx, dy, graph):
+        shifted = graph.copy()
+        for node, data in graph.nodes(data=True):
+            x, y = node
+            new_node = (x + dx, y + dy)
+            shifted.remove_node(node)
+            shifted.add_node(new_node, **data)
+        for edge in graph.edges():
+            node1, node2 = edge
+            new_node1 = (node1[0] + dx, node1[1] + dy)
+            new_node2 = (node2[0] + dx, node2[1] + dy)
+            shifted.add_edge(new_node1, new_node2)   
+        return shifted
+
+    def copy_colors_to(self, compoent):
+        for node, data in compoent.graph.nodes(data=True):
+            compoent.graph.nodes[node]["color"] = self.graph.nodes[node]["color"]
+
     def get_shape(self, node):
         """
         given a node, get the shape of the node.
@@ -857,7 +882,7 @@ class ARCGraph:
 
         return ARCGraph(reconstructed_graph, self.name + "_X", self.image, None)
 
-    def carve_at(self, joints=None, target=None): # all common sink nodes of abstracted graph
+    def carve_at(self, joints=None): # all common sink nodes of abstracted graph
         """
         undo the abstraction to get 2D grids corresponding to common components removed
         return all resulting ARCGraph objects
@@ -871,7 +896,7 @@ class ARCGraph:
             for cut, data in self.graph.nodes(data=True):
                 for i, node in enumerate(data["nodes"]):
                     if joints != None and cut in joints:
-                        reconstructed_graph.remove_node(node)
+                        reconstructed_graph.remove_node(node) # carve by cutting out joints
                     else:    
                         try:
                             reconstructed_graph.nodes[node]["color"] = data["color"][i]
@@ -886,23 +911,24 @@ class ARCGraph:
                         try:
                             reconstructed_graph.nodes[node]["color"] = data["color"]
                         except: #KeyError:  # ignore pixels outside of frame
-                            pass
-
-        matching = []                    
+                            pass        
+        
+        partition = []                                    
         for i, component in enumerate(nx.connected_components(reconstructed_graph)):
-            subgraph = reconstructed_graph.subgraph(component)  
-            if target:
-                grid = target.undo_abstraction()
-                if nx.is_isomorphic(subgraph, grid.graph):
-                    GM = nx.algorithms.isomorphism.GraphMatcher(subgraph, grid.graph)
-                    for isomorphism in GM.subgraph_isomorphisms_iter():
-                        nx.relabel_nodes(subgraph, isomorphism)
-                                
-            matching.append(subgraph)
+            subgraph = reconstructed_graph.subgraph(component)
+            partition.append(subgraph)
+        return partition    
 
-                            
-        return matching
-
+    def overlap(self, graph, grid):
+        overlaping = []                    
+        for i, component in enumerate(graph.graph):
+            subgraph = graph.graph.subgraph(component)  
+            if grid:
+                if nx.is_isomorphic(subgraph, grid):     
+                    dx, dy = self.get_relative_shift(grid, subgraph)  
+                    overlap = self.shift_by(dx, dy, subgraph) # make copy an shift it                   
+                    overlaping.append(overlap)
+        return overlaping                    
 
     def update_abstracted_graph(self, affected_nodes):
         """

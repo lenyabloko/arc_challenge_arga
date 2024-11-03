@@ -47,9 +47,10 @@ class Image:
         elif graph:
             self.width = max([node[1] for node in graph.nodes()]) + 1
             self.height = max([node[0] for node in graph.nodes()]) + 1
-            self.image_size = (width, height)
+            self.image_size = (self.width, self.height)
             self.graph = graph
             self.arc_graph = ARCGraph(self.graph, self.name, self)
+            nx.set_node_attributes(self.graph, self.background_color, "color")
             colors = []
             for node, data in graph.nodes(data=True):
                 colors.append(data["color"])

@@ -644,10 +644,10 @@ class ARCGraph:
                 return True
         return False
 
-    def get_relative_shift(self, grid, subgraph):
-        for node in subgraph.nodes():
+    def get_relative_shift(self, grid):
+        for node in grid.nodes():
             x,y = node
-            if not node in grid:
+            if not node in self.graph:
                 return (-x,-y)      
         return (0,0)        
    
@@ -665,9 +665,9 @@ class ARCGraph:
             shifted.add_edge(new_node1, new_node2)   
         return shifted
 
-    def copy_colors_to(self, compoent):
-        for node, data in compoent.graph.nodes(data=True):
-            compoent.graph.nodes[node]["color"] = self.graph.nodes[node]["color"]
+    def copy_colors_to(self, component):
+        for node, data in component.graph.nodes(data=True):
+            component.graph.nodes[node]["color"] = self.graph.nodes[node]["color"]
 
     def get_shape(self, node):
         """
@@ -744,14 +744,6 @@ class ARCGraph:
             x = (filtered_point[1] + relative_point[1]) // 2
             return (y, x)
 
-    def analyze_symmetry(self, node): 
-        component = self.undo_abstraction(node) #  only colorize subnodes of abstraced component node
-        symmetries = nx.isomorphism.ISMAGS.analyze_symmetry(self, component, set(component.graph.nodes), {e: 0 for e in component.graph.edges})
-        return symmetries
-        
-    def map(self, G1,G2):
-        GM = nx.algorithms.isomorphism.GraphMatcher(G1,G2)
-        return GM.subgraph_isomorphisms_iter()
         
     def get_largest_common_subgraph(self, graph):
         ismags = nx.isomorphism.ISMAGS(self.graph, graph)
@@ -919,16 +911,12 @@ class ARCGraph:
             partition.append(subgraph)
         return partition    
 
-    def overlap(self, graph, grid):
-        overlaping = []                    
-        for i, component in enumerate(graph.graph):
-            subgraph = graph.graph.subgraph(component)  
-            if grid:
-                if nx.is_isomorphic(subgraph, grid):     
-                    dx, dy = self.get_relative_shift(grid, subgraph)  
-                    overlap = self.shift_by(dx, dy, subgraph) # make copy an shift it                   
-                    overlaping.append(overlap)
-        return overlaping                    
+    def shift(self, grid):
+        shifted = None
+        if nx.is_isomorphic(self.graph, grid.graph):     
+            dx, dy = self.get_relative_shift(grid.graph)  
+            shifted = self.shift_by(dx, dy, grid.graph) # makes copy, then shifts it                   
+        return shifted                    
 
     def update_abstracted_graph(self, affected_nodes):
         """

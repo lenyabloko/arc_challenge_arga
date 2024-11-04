@@ -330,100 +330,87 @@ class Task:
             self.skip_abstractions.add(self.abstraction)        
         return found_match
     
-    def match_size(self, decomposition, in_abs_graphs, out_abs_graphs):
-        matching = {}
-        for i, in_abs_graph in enumerate(in_abs_graphs):
-            matching[in_abs_graph.name] = []
-            for in_graph in decomposition[in_abs_graph.name]:
-                out_abs_graph = out_abs_graphs[i]
-                for out_graph in decomposition[out_abs_graph.name]:
-                    if out_graph.image.image_size == in_graph.image.image_size:
-                        matching[in_abs_graph.name].append(in_graph)
-                        #if self.save_images:
-                        in_graph.plot(save_fig=True)
-        return matching                        
-    
+ 
     def fold(self, in_abstracted_graphs, out_abstracted_graphs):
-        match_in = {}
-        match_out = {}
-        decomposition = self.carve(in_abstracted_graphs, out_abstracted_graphs)     
-        for name, components in decomposition.items(): #ex. name '0520fde7_1_train_in_nbccg'
-            if len(components) > 1:
+        examples_in = []
+        examples_out = []
+        for i, in_abs_graph in enumerate(in_abstracted_graphs):
+            out_abs_graph = out_abstracted_graphs[i]
+            for name, component in self.carve(in_abs_graph, out_abs_graph).items():
                 if "_in_" in name:
-                    match_in = self.match_size(decomposition, in_abstracted_graphs, out_abstracted_graphs)
+                    examples_in.append(component)
                 if "_out_" in name:
-                    match_out = self.match_size(decomposition, out_abstracted_graphs, in_abstracted_graphs)  
+                    examples_out.append(component)  
         
-        if len(match_in) == 0 and len(match_out) == 0:
+        if len(examples_in) == 0 and len(examples_out) == 0:
             print("Failed to decompose abstraction!") 
         
         overlay = None    
-        if len(match_in) > 0:
-            for name, components in match_in.items():
-                print(name+": {} to one fold".format(len(components)))
 
-                background_color = 0
-                for i, component in enumerate(components):
-                    if not overlay:
-                        background_color = component.image.background_color
-                        image = Image(self, overlay, component.width, component.height, overlay, component.name[-2])
-                        overlay = image.arc_graph
-                        overlay.image.background_color = background_color
-                        overlay.name = component.name[0:-2] + "_O"
-        
-                    if i < len(components):
-                        next = components[i]
-                        for node, data in component.graph.nodes(data=True):
-                            component_color = data["color"]
-                            next_color = next.graph.nodes[node]["color"]
-                            if component_color != background_color:
-                                if next_color != next.image.background_color:
-                                    overlay.graph.nodes[node]["color"] = component_color     
-                                    overlay.plot(save_fig=True)  
-                        
+        for name, components in examples_in:
+            print(name+": {} to one fold".format(len(components)))
+
+            background_color = 0
+            for i, component in enumerate(components):
+                if not overlay:
+                    background_color = component.image.background_color
+                    image = Image(self, overlay, component.width, component.height, overlay, component.name[-2])
+                    overlay = image.arc_graph
+                    overlay.image.background_color = background_color
+                    overlay.name = component.name[0:-2] + "_O"
+    
+                if i < len(components):
+                    next = components[i]
+                    for node, data in component.graph.nodes(data=True):
+                        component_color = data["color"]
+                        next_color = next.graph.nodes[node]["color"]
+                        if component_color != background_color:
+                            if next_color != next.image.background_color:
+                                overlay.graph.nodes[node]["color"] = component_color     
+                                overlay.plot(save_fig=True)  
+                    
         #print(name+": One to {}".format(len(components)))    
 
         # return modified copies!
         return in_abstracted_graphs, out_abstracted_graphs
                     
-    def carve(self, in_abs_graphs, out_abs_graphs):
+    def carve(self, in_abs_graph, out_abs_graph):
         decomposition = {}
-        for i, in_abs_graph in enumerate(in_abs_graphs):
-            in_graph = in_abs_graph.undo_abstraction()
-            out_abs_graph = out_abs_graphs[i]
-            out_graph = out_abs_graph.undo_abstraction()
-             
-            decomposition[in_abs_graph.name] = []
-            joints = in_abs_graph.find_common_descendants()
-            if len(joints) > 0: 
-                components = in_abs_graph.carve_at(joints)
-                for j, component in enumerate(components):
-                    name = in_abs_graph.name + "_Y_{}".format(j+1)
-                    graph = ARCGraph(component,name,Image(self,graph=component,name=name))
-                    in_graph.copy_colors_to(graph)
-                    in_abs_graph.overlap(graph, out_graph.graph)
+        in_graph = in_abs_graph.undo_abstraction()
+        out_graph = out_abs_graph.undo_abstraction()
+
+        decomposition[in_abs_graph.name] = []
+        joints = in_abs_graph.find_common_descendants()
+        if len(joints) > 0: 
+            components = in_abs_graph.carve_at(joints)
+            for j, component in enumerate(components): # nx.graph.subgraph(component)
+                name = in_abs_graph.name + "_Y_{}".format(j+1)
+                image = Image(self,graph=component,name=name)
+                graph = image.arc_graph
+                if graph.image.image_size == out_graph.image.image_size:
+                    #in_graph.copy_colors_to(graph) # copy colors before shiting coordinates
+                    out_graph.shift(graph)      # shift coordinates to match self
+                    #if self.save_images:
+                    graph.plot(save_fig=True)
                     decomposition[in_abs_graph.name].append(graph)    
-            else:
-                decomposition[in_abs_graph.name].append(in_graph)    
-    
-            decomposition[out_abs_graph.name] = []         
-            joints = out_abs_graph.find_common_descendants()
-            if len(joints) > 0: 
-                components = out_abs_graph.carve_at(joints)        
-                for j, component in enumerate(components):
-                    name = out_abs_graph.name + "_Y_{}".format(j+1)
-                    graph = ARCGraph(component,name,Image(self,graph=component,name=name))
-                    out_graph.copy_colors_to(graph)
-                    out_abs_graph.overlap(graph, in_graph.graph)
-                    decomposition[out_abs_graph.name].append(graph)   
-            else:
-                decomposition[out_abs_graph.name].append(out_graph)         
+        else:
+            decomposition[in_abs_graph.name].append(in_graph)    
+
+        decomposition[out_abs_graph.name] = []         
+        joints = out_abs_graph.find_common_descendants()
+        if len(joints) > 0: 
+            components = out_abs_graph.carve_at(joints)        
+            for j, component in enumerate(components):
+                name = out_abs_graph.name + "_Y_{}".format(j+1)
+                graph = ARCGraph(component,name,Image(self,graph=component,name=name))
+                #out_graph.copy_colors_to(graph)
+                in_graph.shift(component)
+                decomposition[out_abs_graph.name].append(graph)   
+        else:
+            decomposition[out_abs_graph.name].append(out_graph)         
+        
         return decomposition  
-       
-    def list_isomorph(self, in_abs_graphs, out_abs_graphs):
-        for i, in_abs_graph in enumerate(in_abs_graphs):
-            graphs = in_abs_graph.graph.get(out_abs_graphs[i].graph)
-        return list(graphs)
+   
       
     def search_shared_frontier(self):
         """

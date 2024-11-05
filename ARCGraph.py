@@ -1,4 +1,5 @@
 import copy
+import numpy as np
 import networkx as nx
 import matplotlib.pyplot as plt
 from itertools import combinations
@@ -644,27 +645,6 @@ class ARCGraph:
                 return True
         return False
 
-    def get_relative_shift(self, grid):
-        for node in grid.nodes():
-            x,y = node
-            if not node in self.graph:
-                return (-x,-y)      
-        return (0,0)        
-   
-    def shift_by(self, dx, dy, graph):
-        shifted = graph.copy()
-        for node, data in graph.nodes(data=True):
-            x, y = node
-            new_node = (x + dx, y + dy)
-            shifted.remove_node(node)
-            shifted.add_node(new_node, **data)
-        for edge in graph.edges():
-            node1, node2 = edge
-            new_node1 = (node1[0] + dx, node1[1] + dy)
-            new_node2 = (node2[0] + dx, node2[1] + dy)
-            shifted.add_edge(new_node1, new_node2)   
-        return shifted
-
     def copy_colors_to(self, component):
         for node, data in component.graph.nodes(data=True):
             component.graph.nodes[node]["color"] = self.graph.nodes[node]["color"]
@@ -907,16 +887,53 @@ class ARCGraph:
         
         partition = []                                    
         for i, component in enumerate(nx.connected_components(reconstructed_graph)):
-            subgraph = reconstructed_graph.subgraph(component)
-            partition.append(subgraph)
+            height = max([node[0]  for node in component])+1
+            width = max([node[1]  for node in component])+1
+            grid = nx.grid_2d_graph(height, width)
+            array = self.grid_graph_to_2d_array(grid,height, width) 
+            partition.append(array)
         return partition    
+
+    def grid_graph_to_2d_array(self, grid, m, n):
+        """Converts a NetworkX 2D grid graph to a 2D NumPy array."""
+        # Create an empty 2D array
+        array = np.zeros((m, n))
+        # Fill the array with edge information
+        for edge in grid.edges:
+            x1, y1 = edge[0]
+            x2, y2 = edge[1]
+            array[x1, y1] = 1  # Mark edge presence (you can customize this value)
+        return array
+
 
     def shift(self, grid):
         shifted = None
         if nx.is_isomorphic(self.graph, grid.graph):     
             dx, dy = self.get_relative_shift(grid.graph)  
             shifted = self.shift_by(dx, dy, grid.graph) # makes copy, then shifts it                   
-        return shifted                    
+        return shifted
+    
+    def get_relative_shift(self, component):
+        for node in component:
+            x,y = node
+            if not node in self.graph:
+                return (-x,-y)      
+        return (0,0)        
+   
+    def shift_by(self, dx, dy, graph):
+        shifted = graph.copy()
+        for node, data in graph.nodes(data=True):
+            x, y = node
+            new_node = (x + dx, y + dy)
+            shifted.remove_node(node)
+            shifted.add_node(new_node, **data)
+        for edge in graph.edges():
+            node1, node2 = edge
+            new_node1 = (node1[0] + dx, node1[1] + dy)
+            new_node2 = (node2[0] + dx, node2[1] + dy)
+            shifted.add_edge(new_node1, new_node2)   
+        return shifted
+                    
 
     def update_abstracted_graph(self, affected_nodes):
         """

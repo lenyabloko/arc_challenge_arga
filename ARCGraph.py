@@ -887,24 +887,42 @@ class ARCGraph:
         
         partition = []                                    
         for i, component in enumerate(nx.connected_components(reconstructed_graph)):
-            height = max([node[0]  for node in component])+1
-            width = max([node[1]  for node in component])+1
+            rows = [node[0] for node in component]
+            cols = [node[1] for node in component]
+            height = max(rows) - min(rows) + 1
+            width = max(cols) - min (cols) + 1
             grid = nx.grid_2d_graph(height, width)
-            array = self.grid_graph_to_2d_array(grid,height, width) 
+            
+            shift = (0,0)
+            dx = max(rows) - min(rows) + len(joints) + 1
+            dy = max(cols) - min(cols) + len(joints) + 1
+            orientation = max(cols) - max(rows)
+            if orientation > 0:
+                shift = (0, dy)
+            elif orientation < 0:
+                shift = (dx, 0)    
+            array = self.grid_graph_to_2d_array(grid, height, width, reconstructed_graph, shift) 
             partition.append(array)
         return partition    
 
-    def grid_graph_to_2d_array(self, grid, m, n):
+    def grid_graph_to_2d_array(self, grid, height, width, graph, shift):
         """Converts a NetworkX 2D grid graph to a 2D NumPy array."""
+        dx, dy = shift
         # Create an empty 2D array
-        array = np.zeros((m, n))
+        array = np.zeros((height, width))
         # Fill the array with edge information
-        for edge in grid.edges:
-            x1, y1 = edge[0]
-            x2, y2 = edge[1]
-            array[x1, y1] = 1  # Mark edge presence (you can customize this value)
+        for node in grid: # graph.nodes(data=True):
+            x,y = node       
+            color = graph.nodes[(x+dx,y+dy)]["color"]    
+            array[x, y] = color  # Mark edge presence (you can customize this value)   
         return array
 
+    def get_relative_shift(self, component, grid):
+        for node in component:
+            x,y = node
+            if not node in grid.nodes:
+                return (x,y)      
+        return (0,0)        
 
     def shift(self, grid):
         shifted = None
@@ -912,13 +930,6 @@ class ARCGraph:
             dx, dy = self.get_relative_shift(grid.graph)  
             shifted = self.shift_by(dx, dy, grid.graph) # makes copy, then shifts it                   
         return shifted
-    
-    def get_relative_shift(self, component):
-        for node in component:
-            x,y = node
-            if not node in self.graph:
-                return (-x,-y)      
-        return (0,0)        
    
     def shift_by(self, dx, dy, graph):
         shifted = graph.copy()

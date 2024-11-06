@@ -346,17 +346,15 @@ class Task:
             print("Failed to decompose abstraction!") 
         
         overlay = None    
-
-        for name, components in examples_in:
-            print(name+": {} to one fold".format(len(components)))
+        for components in examples_in:
+            print(": {} to one fold".format(len(components)))
 
             background_color = 0
             for i, component in enumerate(components):
-                if not overlay:
-                    background_color = component.image.background_color
+                if not overlay: # create blank image and graph to overaly components
                     image = Image(self, overlay, component.width, component.height, overlay, component.name[-2])
                     overlay = image.arc_graph
-                    overlay.image.background_color = background_color
+                    overlay.image.background_color = component.image.background_color
                     overlay.name = component.name[0:-2] + "_O"
     
                 if i < len(components):
@@ -385,13 +383,11 @@ class Task:
             components = in_abs_graph.carve_at(joints)
             for j, component in enumerate(components): # nx.graph.subgraph(component)
                 name = in_abs_graph.name + "_Y_{}".format(j+1)
-                image = Image(self,graph=component,name=name)
-                graph = image.arc_graph
-                if graph.image.image_size == out_graph.image.image_size:
-                    #in_graph.copy_colors_to(graph) # copy colors before shiting coordinates
-                    out_graph.shift(graph)      # shift coordinates to match self
-                    #if self.save_images:
-                    graph.plot(save_fig=True)
+                image = Image(self,grid=component,name=name)
+                if image.image_size == out_graph.image.image_size:
+                    graph = image.arc_graph 
+                    if self.save_images:
+                        graph.plot(save_fig=True)
                     decomposition[in_abs_graph.name].append(graph)    
         else:
             decomposition[in_abs_graph.name].append(in_graph)    
@@ -402,10 +398,12 @@ class Task:
             components = out_abs_graph.carve_at(joints)        
             for j, component in enumerate(components):
                 name = out_abs_graph.name + "_Y_{}".format(j+1)
-                graph = ARCGraph(component,name,Image(self,graph=component,name=name))
-                #out_graph.copy_colors_to(graph)
-                in_graph.shift(component)
-                decomposition[out_abs_graph.name].append(graph)   
+                image = Image(self,graph=component,name=name)
+                if graph.image.image_size == in_graph.image.image_size:
+                    graph = image.arc_graph
+                    if self.save_images:
+                        graph.plot(save_fig=True)  
+                    decomposition[out_abs_graph.name].append(graph)   
         else:
             decomposition[out_abs_graph.name].append(out_graph)         
         

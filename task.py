@@ -345,27 +345,24 @@ class Task:
         if len(examples_in) == 0 and len(examples_out) == 0:
             print("Failed to decompose abstraction!") 
         
-        overlay = None    
         for components in examples_in:
             print(": {} to one fold".format(len(components)))
 
             background_color = 0
             for i, component in enumerate(components):
-                if not overlay: # create blank image and graph to overaly components
-                    image = Image(self, overlay, component.width, component.height, overlay, component.name[-2])
-                    overlay = image.arc_graph
+                if i > 0 and i < len(components): # create blank image and graph to overaly component over previous
+                    image = Image(self, None, component.width, component.height) # component.graph) # None = blank 
+                    overlay = ARCGraph(image.graph, component.name[0:-2] + "_Z_{}".format(i), image, None) # not absract
                     overlay.image.background_color = component.image.background_color
-                    overlay.name = component.name[0:-2] + "_O"
-    
-                if i < len(components):
-                    next = components[i]
+        
+                    previous = components[i-1]
                     for node, data in component.graph.nodes(data=True):
                         component_color = data["color"]
-                        next_color = next.graph.nodes[node]["color"]
-                        if component_color != background_color:
-                            if next_color != next.image.background_color:
-                                overlay.graph.nodes[node]["color"] = component_color     
-                                overlay.plot(save_fig=True)  
+                        previous_color = previous.graph.nodes[node]["color"]
+                        if component_color != background_color and previous_color != previous.image.background_color:
+                            overlay.graph.nodes[node]["color"] = component_color   
+                    if self.save_images:  
+                        overlay.plot(save_fig=True, file_name=overlay.name)  
                     
         #print(name+": One to {}".format(len(components)))    
 
@@ -381,7 +378,7 @@ class Task:
         joints = in_abs_graph.find_common_descendants()
         if len(joints) > 0: 
             components = in_abs_graph.carve_at(joints)
-            for j, component in enumerate(components): # nx.graph.subgraph(component)
+            for j, component in enumerate(components): 
                 name = in_abs_graph.name + "_Y_{}".format(j+1)
                 image = Image(self,grid=component,name=name)
                 if image.image_size == out_graph.image.image_size:

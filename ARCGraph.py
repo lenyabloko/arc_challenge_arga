@@ -51,7 +51,7 @@ class ARCGraph:
 
         self.width = max([node[1] for node in self.image.graph.nodes()]) + 1
         self.height = max([node[0] for node in self.image.graph.nodes()]) + 1
-        self.task_id = name.split("_")[0]
+        self.task_id = self.name.split("_")[0]
         self.save_dir = self.img_dir + "/" + self.task_id
     
     def is_directed(self):
@@ -902,19 +902,19 @@ class ARCGraph:
             elif orientation < 0:
                 shift = (dx, 0)    
             array = self.grid_graph_to_2d_array(grid, height, width, reconstructed_graph, shift) 
-            partition.append(array)
+            partition.append(array.tolist())
         return partition    
 
     def grid_graph_to_2d_array(self, grid, height, width, graph, shift):
         """Converts a NetworkX 2D grid graph to a 2D NumPy array."""
         dx, dy = shift
         # Create an empty 2D array
-        array = np.zeros((height, width))
+        array = np.zeros((height, width)).astype(int)
         # Fill the array with edge information
         for node in grid: # graph.nodes(data=True):
             x,y = node       
             color = graph.nodes[(x+dx,y+dy)]["color"]    
-            array[x, y] = color  # Mark edge presence (you can customize this value)   
+            array[x, y] = color
         return array
 
     def get_relative_shift(self, component, grid):

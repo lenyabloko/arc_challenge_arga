@@ -247,7 +247,7 @@ class Task:
             in_abstracted_graphs[abstraction] = self.input_abstracted_graphs_original[abstraction]
             out_abstracted_graphs[abstraction] = self.output_abstracted_graphs_original[abstraction]
             if abstraction == "nbccg" and not compatible: # ex. in and out images size is different   
-                in_abs_graphs, out_abs_graphs = self.fold(in_abstracted_graphs[abstraction], out_abstracted_graphs[abstraction])
+                self.fold(in_abstracted_graphs, out_abstracted_graphs, abstraction)
                         
             # get the list of object sizes and degrees in self.input_abstracted_graphs_original[abstraction]
             self.get_static_object_attributes(abstraction)
@@ -331,43 +331,29 @@ class Task:
         return found_match
     
  
-    def fold(self, in_abstracted_graphs, out_abstracted_graphs):
-        examples_in = []
-        examples_out = []
-        for i, in_abs_graph in enumerate(in_abstracted_graphs):
-            out_abs_graph = out_abstracted_graphs[i]
-            for name, component in self.carve(in_abs_graph, out_abs_graph).items():
-                if "_in_" in name:
-                    examples_in.append(component)
-                if "_out_" in name:
-                    examples_out.append(component)  
-        
-        if len(examples_in) == 0 and len(examples_out) == 0:
-            print("Failed to decompose abstraction!") 
-        
-        for components in examples_in:
-            print(": {} to one fold".format(len(components)))
-
-            background_color = 0
-            for i, component in enumerate(components):
-                if i > 0 and i < len(components): # create blank image and graph to overaly component over previous
-                    image = Image(self, None, component.width, component.height) # component.graph) # None = blank 
-                    overlay = ARCGraph(image.graph, component.name[0:-2] + "_Z_{}".format(i), image, None) # not absract
-                    overlay.image.background_color = component.image.background_color
-        
-                    previous = components[i-1]
-                    for node, data in component.graph.nodes(data=True):
-                        component_color = data["color"]
-                        previous_color = previous.graph.nodes[node]["color"]
-                        if component_color != background_color and previous_color != previous.image.background_color:
-                            overlay.graph.nodes[node]["color"] = component_color   
+    def fold(self, in_abstracted_graphs, out_abstracted_graphs, abstraction):
+        for i, in_abs_graph in enumerate(in_abstracted_graphs[abstraction]):
+            out_abs_graph = out_abstracted_graphs[abstraction][i]
+            for name, components in self.carve(in_abs_graph, out_abs_graph).items():
+                print(name+": {} to one fold".format(len(components)))
+                overlay = None
+                for j, component in enumerate(components):
+                    if j > 0 and j < len(components): # create blank image and graph to overaly component over previous
+                        image = Image(self, None, component.width, component.height) # component.graph) # None = blank 
+                        overlay = ARCGraph(image.graph, component.name[0:-2] + "_Z_{}".format(j), image) # not absract
+                        overlay.image.background_color = component.image.background_color
+                        
+                        previous = components[j-1]
+                        for node, data in component.graph.nodes(data=True):
+                            component_color = data["color"]
+                            previous_color = previous.graph.nodes[node]["color"]
+                            if component_color != component.image.background_color and previous_color != previous.image.background_color:
+                                overlay.graph.nodes[node]["color"] = component_color   
+                if overlay:               
+                    in_abstracted_graphs[abstraction][i] = getattr(overlay.image,Image.abstraction_ops[abstraction])() 
                     if self.save_images:  
-                        overlay.plot(save_fig=True, file_name=overlay.name)  
-                    
-        #print(name+": One to {}".format(len(components)))    
-
-        # return modified copies!
-        return in_abstracted_graphs, out_abstracted_graphs
+                        overlay.plot(save_fig=True, file_name=overlay.name)                                                            
+        return in_abstracted_graphs
                     
     def carve(self, in_abs_graph, out_abs_graph):
         decomposition = {}
@@ -387,23 +373,7 @@ class Task:
                         graph.plot(save_fig=True)
                     decomposition[in_abs_graph.name].append(graph)    
         else:
-            decomposition[in_abs_graph.name].append(in_graph)    
-
-        decomposition[out_abs_graph.name] = []         
-        joints = out_abs_graph.find_common_descendants()
-        if len(joints) > 0: 
-            components = out_abs_graph.carve_at(joints)        
-            for j, component in enumerate(components):
-                name = out_abs_graph.name + "_Y_{}".format(j+1)
-                image = Image(self,graph=component,name=name)
-                if graph.image.image_size == in_graph.image.image_size:
-                    graph = image.arc_graph
-                    if self.save_images:
-                        graph.plot(save_fig=True)  
-                    decomposition[out_abs_graph.name].append(graph)   
-        else:
-            decomposition[out_abs_graph.name].append(out_graph)         
-        
+            decomposition[in_abs_graph.name].append(in_graph)     
         return decomposition  
    
       

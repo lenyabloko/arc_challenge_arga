@@ -119,74 +119,77 @@ class Task:
         self.start_time = time.time()
 
         # initialize frontier
-        stop_search = self.initialize_frontier() # create first frontier_node
-
+        self.stop_search = self.initialize_frontier() # create first frontier_node
+        
+        self.solution_apply = []
         # main loop: search for next frontier_node = self.frontier.get(False)
-        while not stop_search:
+        while not self.stop_search:
             if self.shared_frontier:
                 solution = self.search_shared_frontier()
             else:
                 solution = self.search_separate_frontier()
+                
             if solution == None:
                 print("Failed to initialize")
                 return
-               
-            if solution.priority == 0:
+            elif solution.priority == 0:
                 solutions = self.solutions[solution.name] 
                 if solutions == None or len(solutions) == 0:
                     self.solutions[solution.name] = [solution.data]
                 else: 
-                    self.solutions[solution.name].append(solution.data)                              
+                    self.solutions[solution.name].append(solution.data)
+            else:
+                self.solution_apply = solution.data                                       
                     
-                # plot reconstructed train images and merge partial solutions
-                for i, g in enumerate(self.input_abstracted_graphs_original[self.abstraction]):        
-                    if self.solutions[i] == None:
-                       break
-                    for j, solution in enumerate(self.solutions[i]):
-                        for k, call in enumerate(solution):
-                            self.solution_apply_calls.append(call)
-                            g.apply(**call)
-                        if self.save_images: # plot each solution as _xj   
-                            g.plot(save_fig=True, file_name=g.name + "_x{}".format(j))
-                            reconstructed = self.train_input[i].undo_abstraction(g)
-                            reconstructed.plot(save_fig=True)
-                    self.train_output[i].arc_graph.plot(save_fig=True)
-                       
-                    # apply to test image
-                    test_input = self.test_input[0]
-                    abstracted_graph = getattr(test_input, Image.abstraction_ops[self.abstraction])()
-                    abstracted_graph.plot(save_fig=True)
+        # plot reconstructed train images and merge partial solutions
+        for i, g in enumerate(self.input_abstracted_graphs_original[self.abstraction]):        
+            if self.solutions[i] == None:
+                break
+            for j, solution in enumerate(self.solutions[i]):
+                for k, call in enumerate(solution):
+                    self.solution_apply_calls.append(call)
+                    g.apply(**call)
+                #if self.save_images: # plot each solution as _xj (little x)  
+                g.plot(save_fig=True, file_name=g.name + "_x{}".format(j))
+                reconstructed = self.train_input[i].undo_abstraction(g)
+                reconstructed.plot(save_fig=True)
+            self.train_output[i].arc_graph.plot(save_fig=True)
+                
+            # apply to test image
+            test_input = self.test_input[0]
+            abstracted_graph = getattr(test_input, Image.abstraction_ops[self.abstraction])()
+            abstracted_graph.plot(save_fig=True)
+            
+            self.solution_apply = []
+            for call in self.solution_apply_calls:
+                operation = call.copy() 
+                del operation['transformation']
+                del operation['transformation_params']     
+                if call not in self.solution_apply: #len(self.get_affected_nodes(operation, abstracted_graph)) > 0:
+                    self.solution_apply.append(call)
                     
-                    self.solution_apply = []
-                    for call in self.solution_apply_calls:
-                        operation = call.copy() 
-                        del operation['transformation']
-                        del operation['transformation_params']     
-                        if call not in self.solution_apply: #len(self.get_affected_nodes(operation, abstracted_graph)) > 0:
-                            self.solution_apply.append(call)
-                            
-                    for call in self.solution_apply:        
-                        abstracted_graph.apply(**call)
-                        
-                    abstracted_graph.plot(save_fig=True, file_name=abstracted_graph.name)
-                    reconstructed = test_input.undo_abstraction(abstracted_graph)
-                    reconstructed.plot(save_fig=True)
-                    test_input.arc_graph.plot(save_fig=True)
-                    self.test_output[0].arc_graph.plot(save_fig=True)
+            for call in self.solution_apply:        
+                abstracted_graph.apply(**call)
+                
+            abstracted_graph.plot(save_fig=True, file_name=abstracted_graph.name)
+            reconstructed = test_input.undo_abstraction(abstracted_graph)
+            reconstructed.plot(save_fig=True)
+            test_input.arc_graph.plot(save_fig=True)
+            self.test_output[0].arc_graph.plot(save_fig=True)
 
-                    # check if the solution found the correct test output
-                    error = 0
-                    for node, data in self.test_output[0].graph.nodes(data=True):
-                        if data["color"] != reconstructed.graph.nodes[node]["color"]:
-                            error += 1
-                    if error == 0:
-                        print("Found solution!")
-                        stop_search = True
-                    else:
-                        print("Predicted {} out of {} pixels incorrectly".format(error, len(
-                            self.test_output[0].graph.nodes())))
-                        print("===============================================================")
-        
+            # check if the solution found the correct test output
+            error = 0
+            for node, data in self.test_output[0].graph.nodes(data=True):
+                if data["color"] != reconstructed.graph.nodes[node]["color"]:
+                    error += 1
+            if error == 0:
+                print("Found solution for task {}".format(self.task_id))
+                break
+            else:
+                print("Predicted {} out of {} pixels incorrectly".format(error, len(
+                    self.test_output[0].graph.nodes())))
+                print("===============================================================")
+
         for i, g in enumerate(self.input_abstracted_graphs_original[self.abstraction]):
             for call in self.solution_apply:        
                 g.apply(**call)
@@ -291,8 +294,9 @@ class Task:
                 print(self.current_best.data)
                 print("Runtime till solution: {}".format(time.time() - self.start_time))
                 print("===============================================================")
-                # return True # one training case is solved but may be not all 
-            """ # no timeout for debug
+                # one training case is solved but may be not all 
+                break # no need for other abstractions
+            #""" # no timeout for debug
             if time.time() - self.start_time > self.time_limit:  # timeout
                 self.solution_apply_call = frontier_node.data
                 self.solution_train_error = frontier_node.priority
@@ -302,7 +306,7 @@ class Task:
                 print(self.solution_apply_call)
                 print("Runtime till solution: {}".format(time.time() - self.start_time))
                 return True
-            """
+            #"""
             self.top_level_node_count += 1 
         print("Found {} applicable abstractions".format(self.top_level_node_count))    
         return False # continue search for best solution
@@ -387,10 +391,11 @@ class Task:
             self.solution_apply_call = self.current_best_apply_call
             self.solution_train_error = self.current_best_score
             self.abstraction = self.current_best_abstraction
+            self.stop_search = True
             print("Empty Frontier is reached! Best score: {}, Abstraction used: {}, Apply Call = ".format(self.current_best_score, self.abstraction))
             print(self.current_best_apply_call)
             print("Runtime till solution: {}".format(time.time() - self.start_time))
-            return self.current_best # search space is exhosted    
+            return self.current_best   
 
         frontier_node = self.frontier.get() 
 
@@ -444,17 +449,7 @@ class Task:
                 if tabu - 1 == 0:
                     for node in self.tabu_list_waiting[abs]:  # put the nodes in waiting list back into frontier
                         self.frontier.put(node)
-        """
-        if time.time() - self.start_time > self.time_limit:  # timeout
-            self.solution_apply_call = self.current_best_apply_call
-            self.solution_train_error = self.current_best_score
-            self.abstraction = self.current_best_abstraction
-            print("Solution Not Found due to time limit reached! Best effort has cost of {}, "
-                  "Abstraction used: {}, Apply Call = ".format(self.current_best_score, self.abstraction))
-            print(self.current_best_apply_call)
-            print("Runtime till solution: {}".format(time.time() - self.start_time))
-            return True
-        """    
+             
         return frontier_node
 
     def search_separate_frontier(self):
@@ -491,7 +486,7 @@ class Task:
                 self.current_best = frontier_node
                 self.solution_apply_call = apply_calls
                 self.solution_train_error = 0
-                print("Solution Found! Abstraction used: {}, Apply Call = ".format(self.abstraction))
+                print("Partial solution Found! Abstraction used: {}, Apply Call = ".format(self.abstraction))
                 print(apply_calls)
                 print("Runtime till solution: {}".format(time.time() - self.start_time))
                 print("===============================================================")
@@ -506,25 +501,13 @@ class Task:
                     frontier_node.priority, len(apply_calls), self.abstraction))
             print(apply_calls)
             self.expand_frontier(frontier_node)
-            """
-            if time.time() - self.start_time > self.time_limit:  # timeout
-                self.solution_apply_call = self.current_best_apply_call
-                self.solution_train_error = self.current_best_score
-                self.abstraction = self.current_best_abstraction
-                print(
-                    "Solution Not Found! Best effort has cost of {}, Abstraction used: {}, Apply Call = ".format(
-                        self.current_best_score, self.abstraction))
-                print(self.current_best_apply_call)
-                print("Runtime till solution: {}".format(time.time() - self.start_time))
-                return True
-             """   
+                
         return frontier_node
 
     def expand_frontier(self, frontier_node):
         """
         expand one frontier node
         """
-        
         # apply the parent frontier.data to the parent node abstractions to build up new base
         self.input_abstracted_graphs[self.abstraction] = []  # up-to-date abstracted graphs
         for i, input_abstracted_original in enumerate(self.input_abstracted_graphs_original[self.abstraction]):
@@ -587,7 +570,6 @@ class Task:
                             token_string = token_string + str(data["color"])
                 token_string = token_string + "_"
                 """
-                
                 # score (different pixels vs output) after applying operations to abstracted graph
                 primary_score = 0                
                 for node, data in self.train_output[i].graph.nodes(data=True):
@@ -600,10 +582,9 @@ class Task:
                             
                 # commulative results across all test cases after scoring         
                 if token_string in self.frontier_hash[self.abstraction]: # common hash for all frontiers
-                    """ # no timeout for frbug
+                    # no timeout for frbug
                     if (time.time() - self.start_time) > self.time_limit:
-                        break
-                    """    
+                        break    
                     #print("Frontier did not produced new abstraction: "+ label+token_string)
                     continue # reject proposed Candidate Node of the search tree (aka dead end)
                 else:
@@ -626,14 +607,12 @@ class Task:
                     else:
                         self.frontier[self.abstraction].put(priority_item) # use separate frontier for each abstraction
                     
-                    """
                     # stop if solution is found or time is up
                     if primary_score == 0 or secondary_score == 0:
                         break 
-                    # no timeout for frbug
-                    if (time.time() - self.start_time) > self.time_limit:
-                        break
-                    """
+            # no timeout for frbug
+            if (time.time() - self.start_time) > self.time_limit:
+                break
 
             self.total_unique_frontier_nodes += added_nodes
                 

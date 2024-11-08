@@ -110,9 +110,9 @@ class ARCGraph:
 
         if self.is_multicolor:
             if not exclude:
-                return color in self.graph.nodes[node]["color"]
+                return self.graph.nodes[node]["color"] == color
             else:
-                return color not in self.graph.nodes[node]["color"] != color
+                return self.graph.nodes[node]["color"] != color
         else:
             if not exclude:
                 return self.graph.nodes[node]["color"] == color
